@@ -1,6 +1,6 @@
 defmodule Naive.Strategy do
   alias Core.Exchange
-  alias Core.Struct.TradeEvent
+  alias Core.Struct.{OrderEvent, TradeEvent}
   alias Decimal, as: D
   alias Naive.Schema.Settings
 
@@ -40,6 +40,15 @@ defmodule Naive.Strategy do
 
   def execute(%TradeEvent{} = trade_event, positions, settings) do
     generate_decisions(positions, [], trade_event, settings)
+    |> Enum.map(fn {decision, position} ->
+      Task.async(fn -> execute_decision(decision, position, settings) end)
+    end)
+    |> Task.await_many()
+    |> then(&parse_results/1)
+  end
+
+  def execute(%OrderEvent{} = order_event, positions, settings) do
+    generate_decisions(positions, [], order_event, settings)
     |> Enum.map(fn {decision, position} ->
       Task.async(fn -> execute_decision(decision, position, settings) end)
     end)
@@ -106,8 +115,8 @@ defmodule Naive.Strategy do
   end
 
   def generate_decision(
-        %TradeEvent{
-          buyer_order_id: order_id
+        %OrderEvent{
+          order_id: order_id
         },
         %Position{
           buy_order: %Exchange.Order{
@@ -123,7 +132,7 @@ defmodule Naive.Strategy do
   end
 
   def generate_decision(
-        %TradeEvent{},
+        %OrderEvent{},
         %Position{
           buy_order: %Exchange.Order{
             status: :filled,
@@ -141,8 +150,8 @@ defmodule Naive.Strategy do
   end
 
   def generate_decision(
-        %TradeEvent{
-          buyer_order_id: order_id
+        %OrderEvent{
+          order_id: order_id
         },
         %Position{
           buy_order: %Exchange.Order{
@@ -156,7 +165,7 @@ defmodule Naive.Strategy do
   end
 
   def generate_decision(
-        %TradeEvent{},
+        %OrderEvent{},
         %Position{
           sell_order: %Exchange.Order{
             status: :filled
@@ -173,8 +182,8 @@ defmodule Naive.Strategy do
   end
 
   def generate_decision(
-        %TradeEvent{
-          seller_order_id: order_id
+        %OrderEvent{
+          order_id: order_id
         },
         %Position{
           sell_order: %Exchange.Order{
@@ -211,6 +220,10 @@ defmodule Naive.Strategy do
   end
 
   def generate_decision(%TradeEvent{}, %Position{}, _positions, _settings) do
+    :skip
+  end
+
+  def generate_decision(%OrderEvent{}, %Position{}, _positions, _settings) do
     :skip
   end
 

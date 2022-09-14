@@ -1,7 +1,7 @@
 defmodule Naive.Trader do
   use GenServer, restart: :temporary
 
-  alias Core.Struct.TradeEvent
+  alias Core.Struct.{OrderEvent, TradeEvent}
   alias Naive.Strategy
 
   require Logger
@@ -75,6 +75,18 @@ defmodule Naive.Trader do
       :exit ->
         {:ok, _settings} = Strategy.update_status(trade_event.symbol, "off")
         Logger.info("Trading for #{trade_event.symbol} stopped")
+        {:stop, :normal, state}
+    end
+  end
+
+  def handle_info(%OrderEvent{} = order_event, %State{} = state) do
+    case Naive.Strategy.execute(order_event, state.positions, state.settings) do
+      {:ok, updated_positions} ->
+        {:noreply, %{state | positions: updated_positions}}
+
+      :exit ->
+        {:ok, _settings} = Strategy.update_status(order_event.symbol, "off")
+        Logger.info("Trading for #{order_event.symbol} stopped")
         {:stop, :normal, state}
     end
   end
