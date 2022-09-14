@@ -46,7 +46,7 @@ defmodule Core.Exchange.Binance do
            quantity: order.orig_qty,
            side: side_to_atom(order.side),
            status: status_to_atom(order.status),
-           timestamp: order.time
+           timestamp: order.update_time
          }}
 
       error ->
@@ -65,7 +65,8 @@ defmodule Core.Exchange.Binance do
            quantity: order.orig_qty,
            side: :buy,
            status: :new,
-           timestamp: order.transact_time
+           symbol: order.symbol,
+           timestamp: order.update_time
          }}
 
       error ->
@@ -84,7 +85,8 @@ defmodule Core.Exchange.Binance do
            quantity: order.orig_qty,
            side: :sell,
            status: :new,
-           timestamp: order.transact_time
+           symbol: order.symbol,
+           timestamp: order.update_time
          }}
 
       error ->
@@ -97,6 +99,8 @@ defmodule Core.Exchange.Binance do
 
   defp status_to_atom("NEW"), do: :new
   defp status_to_atom("FILLED"), do: :filled
+  defp status_to_atom("PARTIALLY_FILLED"), do: :partially_filled
+  defp status_to_atom("CANCELLED"), do: :cancelled
 
   defp fetch_symbol_filters(symbol, exchange_info) do
     symbol_filters =
