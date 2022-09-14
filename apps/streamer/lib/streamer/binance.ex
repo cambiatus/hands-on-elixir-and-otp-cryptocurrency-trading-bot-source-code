@@ -111,7 +111,7 @@ defmodule Streamer.Binance do
       :realized_profitofthetrade => order["rp"]
     }
 
-    Logger.info(
+    Logger.debug(
       "Order event received " <>
         "#{order_event.symbol}@#{order_event.original_price}" <>
         " Status: #{order_event.order_status}"
@@ -125,7 +125,7 @@ defmodule Streamer.Binance do
   end
 
   defp process_event(event) do
-    Logger.info("Ignored event of type #{event["e"]}")
+    Logger.debug("Ignored event of type #{event["e"]}")
   end
 
   defp via_tuple(symbol) do
