@@ -8,7 +8,6 @@ defmodule Naive.Strategy do
 
   @exchange_client Application.compile_env(:naive, :exchange_client)
   @logger Application.compile_env(:core, :logger)
-  @pubsub_client Application.compile_env(:core, :pubsub_client)
   @repo Application.compile_env(:naive, :repo)
 
   defmodule Position do
@@ -364,22 +363,6 @@ defmodule Naive.Strategy do
   end
 
   defp execute_decision(
-         :fetch_buy_order,
-         %Position{
-           id: id,
-           symbol: symbol,
-           buy_order:
-             %Exchange.Order{
-               id: order_id,
-               timestamp: timestamp
-             } = buy_order
-         } = position,
-         _settings
-       ) do
-    @logger.info("Position (#{symbol}/#{id}): The BUY order is now partially filled")
-  end
-
-  defp execute_decision(
          :finished,
          %Position{
            id: id,
@@ -392,24 +375,6 @@ defmodule Naive.Strategy do
     @logger.info("Position (#{symbol}/#{id}): Trade cycle finished")
 
     {:ok, new_position}
-  end
-
-  defp execute_decision(
-         :fetch_sell_order,
-         %Position{
-           id: id,
-           symbol: symbol,
-           sell_order:
-             %Exchange.Order{
-               id: order_id,
-               timestamp: timestamp
-             } = sell_order
-         } = position,
-         _settings
-       ) do
-    @logger.info("Position (#{symbol}/#{id}): The SELL order is now partially filled")
-
-    {:ok, %{position | sell_order: sell_order}}
   end
 
   defp execute_decision(
