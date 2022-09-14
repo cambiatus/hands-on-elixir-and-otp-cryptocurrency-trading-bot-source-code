@@ -85,6 +85,27 @@ defmodule Naive.Strategy do
           settings
         )
 
+      :update_buy_position ->
+        current_buy_order = update_order_position(position, :buy_order, trade_event.order_status)
+
+        generate_decisions(
+          rest,
+          [{:skip, %{position | buy_order: current_buy_order}}] ++ generated_results,
+          trade_event,
+          settings
+        )
+
+      :update_sell_position ->
+        current_sell_order =
+          update_order_position(position, :sell_order, trade_event.order_status)
+
+        generate_decisions(
+          rest,
+          [{:skip, %{position | sell_order: current_sell_order}}] ++ generated_results,
+          trade_event,
+          settings
+        )
+
       decision ->
         generate_decisions(
           rest,
@@ -94,6 +115,20 @@ defmodule Naive.Strategy do
         )
     end
   end
+
+  def update_order_position(position, side, new_status) do
+    new_status = status_to_atom(new_status)
+
+    position
+    |> Map.get(side)
+    |> IO.inspect()
+    |> Map.put(:status, new_status)
+  end
+
+  defp status_to_atom("NEW"), do: :new
+  defp status_to_atom("FILLED"), do: :filled
+  defp status_to_atom("PARTIALLY_FILLED"), do: :partially_filled
+  defp status_to_atom("CANCELLED"), do: :cancelled
 
   def generate_decision(
         %TradeEvent{price: price},
@@ -161,7 +196,7 @@ defmodule Naive.Strategy do
         _positions,
         _settings
       ) do
-    :fetch_buy_order
+    :update_buy_position
   end
 
   def generate_decision(
@@ -193,7 +228,7 @@ defmodule Naive.Strategy do
         _positions,
         _settings
       ) do
-    :fetch_sell_order
+    :update_sell_position
   end
 
   def generate_decision(
