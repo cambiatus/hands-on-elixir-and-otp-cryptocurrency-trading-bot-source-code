@@ -16,6 +16,16 @@ defmodule Core.Exchange.Binance do
     end
   end
 
+  def fetch_exchange_info() do
+    case Binance.get_exchange_info() do
+      {:ok, %{symbols: symbols}} ->
+        {:ok, %{symbols: symbols}}
+
+      error ->
+        error
+    end
+  end
+
   @impl Core.Exchange
   def fetch_symbol_filters(symbol) do
     case Binance.get_exchange_info() do

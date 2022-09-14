@@ -8,7 +8,7 @@ exchange_client = Application.get_env(:naive, :exchange_client)
 
 Logger.info("Fetching exchange info from Binance to create trading settings")
 
-{:ok, %{symbols: symbols}} = exchange_client.get_exchange_info()
+{:ok, %{symbols: symbols}} = exchange_client.fetch_exchange_info()
 
 %{
   chunks: chunks,
