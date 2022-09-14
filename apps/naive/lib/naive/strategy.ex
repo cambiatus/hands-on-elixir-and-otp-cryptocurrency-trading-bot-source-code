@@ -116,13 +116,22 @@ defmodule Naive.Strategy do
   end
 
   def update_order_position(position, side, new_status) do
+    unless new_status == "NEW" do
+      @logger.info(
+        "Position (#{position.symbol}/#{position.id}): The " <>
+          "#{atom_to_side(side)} has been #{new_status}"
+      )
+    end
+
     new_status = status_to_atom(new_status)
 
     position
     |> Map.get(side)
-    |> IO.inspect()
     |> Map.put(:status, new_status)
   end
+
+  defp atom_to_side(:buy_order), do: "BUY order"
+  defp atom_to_side(:sell_order), do: "SELL order"
 
   defp status_to_atom("NEW"), do: :new
   defp status_to_atom("FILLED"), do: :filled
