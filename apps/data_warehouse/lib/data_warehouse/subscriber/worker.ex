@@ -64,24 +64,6 @@ defmodule DataWarehouse.Subscriber.Worker do
     {:noreply, state}
   end
 
-  def handle_info(%Exchange.Order{} = order, state) do
-    data =
-      order
-      |> Map.from_struct()
-      |> Map.merge(%{
-        side: atom_to_side(order.side),
-        status: atom_to_status(order.status)
-      })
-
-    struct(DataWarehouse.Schema.Order, data)
-    |> DataWarehouse.Repo.insert(
-      on_conflict: :replace_all,
-      conflict_target: :id
-    )
-
-    {:noreply, state}
-  end
-
   defp via_tuple(topic) do
     {:via, Registry, {:subscriber_workers, topic}}
   end
