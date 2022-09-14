@@ -303,8 +303,6 @@ defmodule Naive.Strategy do
 
     {:ok, %Exchange.Order{} = order} = @exchange_client.order_limit_buy(symbol, quantity, price)
 
-    :ok = broadcast_order(order)
-
     {:ok, %{position | buy_order: order}}
   end
 
@@ -327,8 +325,6 @@ defmodule Naive.Strategy do
     {:ok, %Exchange.Order{} = order} =
       @exchange_client.order_limit_sell(symbol, quantity, sell_price)
 
-    :ok = broadcast_order(order)
-
     {:ok, %{position | sell_order: order}}
   end
 
@@ -346,19 +342,6 @@ defmodule Naive.Strategy do
          _settings
        ) do
     @logger.info("Position (#{symbol}/#{id}): The BUY order is now partially filled")
-
-    {:ok, %Exchange.Order{} = current_buy_order} =
-      @exchange_client.get_order(
-        symbol,
-        timestamp,
-        order_id
-      )
-
-    :ok = broadcast_order(current_buy_order)
-
-    buy_order = %{buy_order | status: current_buy_order.status}
-
-    {:ok, %{position | buy_order: buy_order}}
   end
 
   defp execute_decision(
@@ -391,17 +374,6 @@ defmodule Naive.Strategy do
        ) do
     @logger.info("Position (#{symbol}/#{id}): The SELL order is now partially filled")
 
-    {:ok, %Exchange.Order{} = current_sell_order} =
-      @exchange_client.get_order(
-        symbol,
-        timestamp,
-        order_id
-      )
-
-    :ok = broadcast_order(current_sell_order)
-
-    sell_order = %{sell_order | status: current_sell_order.status}
-
     {:ok, %{position | sell_order: sell_order}}
   end
 
@@ -422,14 +394,6 @@ defmodule Naive.Strategy do
 
   defp execute_decision(:skip, state, _settings) do
     {:ok, state}
-  end
-
-  defp broadcast_order(%Exchange.Order{} = order) do
-    @pubsub_client.broadcast(
-      Core.PubSub,
-      "ORDERS:#{order.symbol}",
-      order
-    )
   end
 
   def fetch_symbol_settings(symbol) do
