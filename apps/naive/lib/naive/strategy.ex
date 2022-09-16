@@ -344,9 +344,14 @@ defmodule Naive.Strategy do
         "Placing a BUY order @ #{price}, quantity: #{quantity}"
     )
 
-    {:ok, %Exchange.Order{} = order} = @exchange_client.order_limit_buy(symbol, quantity, price)
+    case @exchange_client.order_limit_buy(symbol, quantity, price) do
+      {:ok, %Exchange.Order{} = order} ->
+        {:ok, %{position | buy_order: order}}
 
-    {:ok, %{position | buy_order: order}}
+      {:error, error} ->
+        @logger.info("Error when placing BUY order. Reason: #{error}")
+        {:error, error}
+    end
   end
 
   defp execute_decision(
@@ -365,10 +370,14 @@ defmodule Naive.Strategy do
         "Placing a SELL order @ #{sell_price}, quantity: #{quantity}"
     )
 
-    {:ok, %Exchange.Order{} = order} =
-      @exchange_client.order_limit_sell(symbol, quantity, sell_price)
+    case @exchange_client.order_limit_sell(symbol, quantity, sell_price) do
+      {:ok, %Exchange.Order{} = order} ->
+        {:ok, %{position | sell_order: order}}
 
-    {:ok, %{position | sell_order: order}}
+      {:error, error} ->
+        @logger.info("Error when placing SELL order. Reason: #{error}")
+        {:error, error}
+    end
   end
 
   defp execute_decision(
