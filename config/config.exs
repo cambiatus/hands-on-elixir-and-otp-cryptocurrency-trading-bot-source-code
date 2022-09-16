@@ -27,7 +27,7 @@ config :data_warehouse, DataWarehouse.Repo,
 
 config :streamer,
   # binance_client: BinanceMock,
-  binance_client: Binance,
+  binance_client: Core.Exchange.Binance,
   ecto_repos: [Streamer.Repo]
 
 config :streamer, Streamer.Repo,
@@ -59,11 +59,19 @@ config :naive, Naive.Repo,
   hostname: "localhost"
 
 config :logger,
-  level: :info
+  level: :debug
 
 # Import secrets file with Binance keys if it exists
 if File.exists?("config/secrets.exs") do
   import_config("secrets.exs")
 end
 
-import_config "#{config_env()}.exs"
+config :binance,
+  api_key: "",
+  secret_key: "",
+  end_point: "https://api.binance.com",
+  futures_api_key: "190be4140334dcb0ee4ec5c667bb094caa60e5d0e029727dfcc434d807137983",
+  futures_secret_key: "56722728df8785b9e83c2027d806e6acc60522072655c338c31d21d3ba6dcbbd",
+  futures_end_point: "https://testnet.binancefuture.com"
+
+# import_config "#{config_env()}.exs"
