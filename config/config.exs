@@ -66,12 +66,4 @@ if File.exists?("config/secrets.exs") do
   import_config("secrets.exs")
 end
 
-config :binance,
-  api_key: "",
-  secret_key: "",
-  end_point: "https://api.binance.com",
-  futures_api_key: "190be4140334dcb0ee4ec5c667bb094caa60e5d0e029727dfcc434d807137983",
-  futures_secret_key: "56722728df8785b9e83c2027d806e6acc60522072655c338c31d21d3ba6dcbbd",
-  futures_end_point: "https://testnet.binancefuture.com"
-
-# import_config "#{config_env()}.exs"
+import_config "#{config_env()}.exs"
