@@ -59,7 +59,7 @@ config :naive, Naive.Repo,
   hostname: "localhost"
 
 config :logger,
-  level: :debug
+  level: :info
 
 # Import secrets file with Binance keys if it exists
 if File.exists?("config/secrets.exs") do
