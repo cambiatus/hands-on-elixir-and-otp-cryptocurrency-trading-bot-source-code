@@ -3,6 +3,8 @@ defmodule Streamer.Binance do
 
   require Logger
 
+  @exchange_client Application.get_env(:naive, :exchange_client)
+
   # @stream_endpoint "wss://stream.binance.com:9443/ws/"
   @stream_endpoint "wss://stream.binancefuture.com/ws/"
 
@@ -23,14 +25,18 @@ defmodule Streamer.Binance do
     #       OR conditionally start streaming if no user stream has been started
     # The way it is now it tries to start a stream whenever a streamer is initiated
 
-    {:ok, %Binance.DataStream{listen_key: listen_key}} = Binance.create_listen_key()
+    case @exchange_client.create_listen_key() do
+      {:ok, %{listen_key: listen_key}} ->
+        WebSockex.start_link(
+          "#{@stream_endpoint}#{listen_key}",
+          __MODULE__,
+          nil,
+          name: {:via, Registry, {:binance_streamers, "orders"}}
+        )
 
-    WebSockex.start_link(
-      "#{@stream_endpoint}#{listen_key}",
-      __MODULE__,
-      nil,
-      name: {:via, Registry, {:binance_streamers, "orders"}}
-    )
+      {:error, error} ->
+        Logger.info("Could not connect to user stream. Reason: #{error}")
+    end
   end
 
   def handle_frame({_type, msg}, state) do

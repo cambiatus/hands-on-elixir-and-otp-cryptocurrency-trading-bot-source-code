@@ -2,95 +2,103 @@ defmodule Core.Exchange.Binance do
   @behaviour Core.Exchange
 
   alias Core.Exchange
+  alias Binance.Futures
+  alias Binance.{FuturesOrderResponse, FuturesOrder}
 
   @impl Core.Exchange
   def fetch_symbols() do
-    case Binance.get_exchange_info() do
-      {:ok, %{symbols: symbols}} ->
+    case Futures.get_exchange_info() do
+      {:ok, %{"symbols" => symbols}} ->
         symbols
         |> Enum.map(& &1["symbol"])
         |> then(&{:ok, &1})
 
-      error ->
-        error
+      {:error, error} ->
+        {:error, error}
     end
   end
 
   def fetch_exchange_info() do
-    case Binance.get_exchange_info() do
-      {:ok, %{symbols: symbols}} ->
+    case Futures.get_exchange_info() do
+      {:ok, %{"symbols" => symbols}} ->
         {:ok, %{symbols: symbols}}
 
-      error ->
-        error
+      {:error, error} ->
+        {:error, error}
     end
   end
 
   @impl Core.Exchange
-  def fetch_symbol_filters(symbol) do
-    case Binance.get_exchange_info() do
-      {:ok, exchange_info} -> {:ok, fetch_symbol_filters(symbol, exchange_info)}
-      error -> error
-    end
-  end
-
-  @impl Core.Exchange
-  def get_order(symbol, timestamp, order_id) do
-    case Binance.get_order(symbol, timestamp, order_id) do
-      {:ok, %Binance.Order{} = order} ->
+  def get_order(symbol, _timestamp, order_id) do
+    case Futures.get_order(symbol, order_id) do
+      {:ok, order} ->
         {:ok,
          %Exchange.Order{
-           id: order.order_id,
-           symbol: order.symbol,
-           price: order.price,
-           quantity: order.orig_qty,
-           side: side_to_atom(order.side),
-           status: status_to_atom(order.status),
-           timestamp: order.update_time
+           id: order["orderId"],
+           symbol: order["symbol"],
+           price: order["price"],
+           quantity: order["origQty"],
+           side: side_to_atom(order["side"]),
+           status: status_to_atom(order["status"]),
+           timestamp: order["updateTime"]
          }}
 
-      error ->
-        error
+      {:error, error} ->
+        {:error, error}
     end
   end
 
   @impl Core.Exchange
   def order_limit_buy(symbol, quantity, price) do
-    case Binance.order_limit_buy(symbol, quantity, price, "GTC") do
-      {:ok, %Binance.OrderResponse{} = order} ->
+    case Futures.new_order(%{
+           symbol: symbol,
+           side: "BUY",
+           type: "LIMIT",
+           quantity: quantity,
+           price: price,
+           timeInForce: "GTC"
+         }) do
+      {:ok, order} ->
         {:ok,
          %Exchange.Order{
-           id: order.order_id,
-           price: order.price,
-           quantity: order.orig_qty,
+           id: order["orderId"],
+           price: order["price"],
+           quantity: order["origQty"],
            side: :buy,
            status: :new,
-           symbol: order.symbol,
-           timestamp: order.update_time
+           symbol: order["symbol"],
+           timestamp: order["updateTime"]
          }}
 
-      error ->
-        error
+      {:error, error} ->
+        {:error, error}
     end
   end
 
   @impl Core.Exchange
   def order_limit_sell(symbol, quantity, price) do
-    case Binance.order_limit_sell(symbol, quantity, price, "GTC") do
-      {:ok, %Binance.OrderResponse{} = order} ->
+    case Futures.new_order(%{
+           symbol: symbol,
+           side: "SELL",
+           type: "LIMIT",
+           quantity: quantity,
+           price: price,
+           timeInForce: "GTC"
+         }) do
+      {:ok, order} ->
         {:ok,
          %Exchange.Order{
-           id: order.order_id,
-           price: order.price,
-           quantity: order.orig_qty,
+           id: order["orderId"],
+           price: order["price"],
+           quantity: order["origQty"],
            side: :sell,
            status: :new,
-           symbol: order.symbol,
-           timestamp: order.update_time
+           symbol: order["symbol"],
+           timestamp: order["updateTime"]
          }}
 
-      error ->
-        error
+      {:error, error} ->
+        {:error, error}
     end
   end
 
@@ -102,10 +110,28 @@ defmodule Core.Exchange.Binance do
   defp status_to_atom("PARTIALLY_FILLED"), do: :partially_filled
   defp status_to_atom("CANCELLED"), do: :cancelled
 
+  def create_listen_key() do
+    case Futures.create_listen_key() do
+      {:ok, %{"listenKey" => listen_key}} ->
+        {:ok, %{listen_key: listen_key}}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  @impl Core.Exchange
+  def fetch_symbol_filters(symbol) do
+    case Futures.get_exchange_info() do
+      {:ok, exchange_info} -> {:ok, fetch_symbol_filters(symbol, exchange_info)}
+      {:error, error} -> {:error, error}
+    end
+  end
+
   defp fetch_symbol_filters(symbol, exchange_info) do
     symbol_filters =
       exchange_info
-      |> Map.get(:symbols)
+      |> Map.get("symbols")
       |> Enum.find(&(&1["symbol"] == symbol))
       |> Map.get("filters")
 

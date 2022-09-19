@@ -27,7 +27,7 @@ config :data_warehouse, DataWarehouse.Repo,
 
 config :streamer,
   # binance_client: BinanceMock,
-  binance_client: Binance,
+  binance_client: Core.Exchange.Binance,
   ecto_repos: [Streamer.Repo]
 
 config :strategies,
