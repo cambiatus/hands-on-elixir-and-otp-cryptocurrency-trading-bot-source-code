@@ -150,9 +150,23 @@ defmodule Naive.Strategy do
         _positions,
         _settings
       ) do
-    price = calculate_buy_price(price, buy_down_interval, tick_size)
+    price =
+      Strategies.Caller.call_python(:naive, :calculate_buy_price, [
+        price,
+        D.to_string(buy_down_interval),
+        tick_size
+      ])
+      |> elem(1)
+      |> to_string()
 
-    quantity = calculate_quantity(budget, price, step_size)
+    quantity =
+      Strategies.Caller.call_python(:naive, :calculate_quantity, [
+        D.to_string(budget),
+        price,
+        step_size
+      ])
+      |> elem(1)
+      |> to_string()
 
     {:place_buy_order, price, quantity}
   end
@@ -188,7 +202,15 @@ defmodule Naive.Strategy do
         _positions,
         _settings
       ) do
-    sell_price = calculate_sell_price(buy_price, profit_interval, tick_size)
+    sell_price =
+      Strategies.Caller.call_python(:naive, :calculate_sell_price, [
+        buy_price,
+        to_string(profit_interval),
+        tick_size
+      ])
+      |> elem(1)
+      |> to_string()
+
     {:place_sell_order, sell_price}
   end
 

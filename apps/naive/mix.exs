@@ -36,6 +36,7 @@ defmodule Naive.MixProject do
       {:binance,
        git: "https://github.com/cambiatus/binance.ex",
        ref: "667c6672022b5a9370b539f0ee64755cbb131d32"},
+      {:strategies, in_umbrella: true},
       {:binance_mock, in_umbrella: true},
       {:core, in_umbrella: true},
       {:data_warehouse, in_umbrella: true, only: :test},
