@@ -26,9 +26,7 @@ defmodule Core.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:binance,
-       git: "https://github.com/cambiatus/binance.ex",
-       ref: "667c6672022b5a9370b539f0ee64755cbb131d32"},
+      {:binance, git: "https://github.com/cambiatus/binance.ex"},
       {:phoenix_pubsub, "~> 2.0"}
     ]
   end

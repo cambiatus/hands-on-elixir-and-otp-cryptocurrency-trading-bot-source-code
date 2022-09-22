@@ -50,14 +50,16 @@ defmodule Core.Exchange.Binance do
 
   @impl Core.Exchange
   def order_limit_buy(symbol, quantity, price) do
-    case Futures.new_order(%{
-           symbol: symbol,
-           side: "BUY",
-           type: "LIMIT",
-           quantity: quantity,
-           price: price,
-           timeInForce: "GTC"
-         }) do
+    case Futures.new_order(
+           symbol,
+           "BUY",
+           "LIMIT",
+           %{
+             quantity: quantity,
+             price: price,
+             timeInForce: "GTC"
+           }
+         ) do
       {:ok, order} ->
         {:ok,
          %Exchange.Order{
@@ -77,14 +79,16 @@ defmodule Core.Exchange.Binance do
 
   @impl Core.Exchange
   def order_limit_sell(symbol, quantity, price) do
-    case Futures.new_order(%{
-           symbol: symbol,
-           side: "SELL",
-           type: "LIMIT",
-           quantity: quantity,
-           price: price,
-           timeInForce: "GTC"
-         }) do
+    case Futures.new_order(
+           symbol,
+           "SELL",
+           "LIMIT",
+           %{
+             quantity: quantity,
+             price: price,
+             timeInForce: "GTC"
+           }
+         ) do
       {:ok, order} ->
         {:ok,
          %Exchange.Order{
