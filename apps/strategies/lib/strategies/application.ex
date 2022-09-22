@@ -13,7 +13,7 @@ defmodule Strategies.Application do
       {:name, {:local, :worker}},
       {:worker_module, Strategies.PythonWorker},
       {:size, @python_workers},
-      {:max_overflow, 0}
+      {:max_overflow, @python_workers_overflow}
     ]
   end
 

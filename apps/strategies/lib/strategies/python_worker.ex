@@ -13,9 +13,10 @@ defmodule Strategies.PythonWorker do
 
   def init(_) do
     # Path where we store our python code
-    path = [:code.priv_dir(:naive), "python"] |> Path.join()
+    path = Application.app_dir(:strategies, "priv/python")
     # Path to the virtual environment's interpreter that executes the code
     interpreter = [path, "/bin/python"] |> Path.join()
+
     # Start a process to monitor python
     case :python.start([{:python_path, to_charlist(path)}, {:python, to_charlist(interpreter)}]) do
       {:ok, pid} ->
