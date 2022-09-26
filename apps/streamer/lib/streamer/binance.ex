@@ -14,8 +14,10 @@ defmodule Streamer.Binance do
         "stream for #{symbol} trade events"
     )
 
+    # TODO: Remove hardcoded interval(1m) and enable interval specification for traders
+
     WebSockex.start_link(
-      "#{@stream_endpoint}#{String.downcase(symbol)}@trade",
+      "#{@stream_endpoint}#{String.downcase(symbol)}@kline_1m",
       __MODULE__,
       nil,
       name: via_tuple(symbol)
@@ -71,6 +73,40 @@ defmodule Streamer.Binance do
       Core.PubSub,
       "TRADE_EVENTS:#{trade_event.symbol}",
       trade_event
+    )
+  end
+
+  defp process_event(%{"e" => "kline", "k" => kline} = event) do
+    kline_event = %Core.Struct.KlineEvent{
+      :event_type => event["e"],
+      :event_time => event["E"],
+      :symbol => event["s"],
+      :start_time => kline["t"],
+      :close_time => kline["T"],
+      :interval => kline["i"],
+      :first_trade_id => kline["f"],
+      :last_trade_id => kline["L"],
+      :open_price => kline["o"],
+      :close_price => kline["c"],
+      :high_price => kline["h"],
+      :low_price => kline["l"],
+      :base_asset_volume => kline["v"],
+      :number_of_trades => kline["n"],
+      :complete => kline["x"],
+      :quote_asset_volume => kline["q"],
+      :taker_buy_base_asset_volume => kline["V"],
+      :taker_buy_quote_asset_volume => kline["Q"]
+    }
+
+    Logger.debug(
+      "Kline event received " <>
+        "#{kline_event.symbol}@#{kline_event.close_price}"
+    )
+
+    Phoenix.PubSub.broadcast(
+      Core.PubSub,
+      "KLINE_EVENTS:#{kline_event.symbol}",
+      kline_event
     )
   end
 
