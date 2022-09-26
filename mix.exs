@@ -21,7 +21,8 @@ defmodule Hedgehog.MixProject do
         "ecto.drop",
         "ecto.create",
         "ecto.migrate",
-        "cmd --app naive --app streamer mix seed"
+        "run apps/naive/priv/seed_settings.exs",
+        "run apps/streamer/priv/seed_settings.exs"
       ],
       "test.integration": [
         "setup",

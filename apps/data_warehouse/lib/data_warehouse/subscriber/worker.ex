@@ -2,6 +2,7 @@ defmodule DataWarehouse.Subscriber.Worker do
   use GenServer
 
   alias Core.Exchange
+  alias Core.Struct.OrderEvent
 
   require Logger
 
@@ -43,14 +44,16 @@ defmodule DataWarehouse.Subscriber.Worker do
     {:noreply, state}
   end
 
-  def handle_info(%Exchange.Order{} = order, state) do
-    data =
-      order
-      |> Map.from_struct()
-      |> Map.merge(%{
-        side: atom_to_side(order.side),
-        status: atom_to_status(order.status)
-      })
+  def handle_info(%OrderEvent{} = order, state) do
+    data = %{
+      id: order.order_id,
+      symbol: order.symbol,
+      price: order.original_price,
+      quantity: order.original_quantity,
+      side: order.side,
+      status: order.order_status,
+      timestamp: order.event_time
+    }
 
     struct(DataWarehouse.Schema.Order, data)
     |> DataWarehouse.Repo.insert(
@@ -70,4 +73,5 @@ defmodule DataWarehouse.Subscriber.Worker do
 
   defp atom_to_status(:new), do: "NEW"
   defp atom_to_status(:filled), do: "FILLED"
+  defp atom_to_status(:partially_filled), do: "PARTIALLY_FILLED"
 end

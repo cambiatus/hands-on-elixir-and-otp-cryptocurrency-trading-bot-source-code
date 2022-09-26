@@ -26,7 +26,7 @@ defmodule BinanceMock.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:binance, "~> 1.0"},
+      {:binance, git: "https://github.com/cambiatus/binance.ex"},
       {:core, in_umbrella: true},
       {:decimal, "~> 2.0"},
       {:jason, "~> 1.2"},

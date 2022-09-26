@@ -1,6 +1,6 @@
 defmodule Naive.Strategy do
   alias Core.Exchange
-  alias Core.Struct.TradeEvent
+  alias Core.Struct.{OrderEvent, TradeEvent}
   alias Decimal, as: D
   alias Naive.Schema.Settings
 
@@ -8,7 +8,6 @@ defmodule Naive.Strategy do
 
   @exchange_client Application.compile_env(:naive, :exchange_client)
   @logger Application.compile_env(:core, :logger)
-  @pubsub_client Application.compile_env(:core, :pubsub_client)
   @repo Application.compile_env(:naive, :repo)
 
   defmodule Position do
@@ -47,6 +46,15 @@ defmodule Naive.Strategy do
     |> then(&parse_results/1)
   end
 
+  def execute(%OrderEvent{} = order_event, positions, settings) do
+    generate_decisions(positions, [], order_event, settings)
+    |> Enum.map(fn {decision, position} ->
+      Task.async(fn -> execute_decision(decision, position, settings) end)
+    end)
+    |> Task.await_many()
+    |> then(&parse_results/1)
+  end
+
   def parse_results([]) do
     :exit
   end
@@ -76,6 +84,27 @@ defmodule Naive.Strategy do
           settings
         )
 
+      :update_buy_position ->
+        current_buy_order = update_order_position(position, :buy_order, trade_event.order_status)
+
+        generate_decisions(
+          rest,
+          [{:skip, %{position | buy_order: current_buy_order}}] ++ generated_results,
+          trade_event,
+          settings
+        )
+
+      :update_sell_position ->
+        current_sell_order =
+          update_order_position(position, :sell_order, trade_event.order_status)
+
+        generate_decisions(
+          rest,
+          [{:skip, %{position | sell_order: current_sell_order}}] ++ generated_results,
+          trade_event,
+          settings
+        )
+
       decision ->
         generate_decisions(
           rest,
@@ -85,6 +114,29 @@ defmodule Naive.Strategy do
         )
     end
   end
+
+  def update_order_position(position, side, new_status) do
+    unless new_status == "NEW" do
+      @logger.info(
+        "Position (#{position.symbol}/#{position.id}): The " <>
+          "#{atom_to_side(side)} has been #{new_status}"
+      )
+    end
+
+    new_status = status_to_atom(new_status)
+
+    position
+    |> Map.get(side)
+    |> Map.put(:status, new_status)
+  end
+
+  defp atom_to_side(:buy_order), do: "BUY order"
+  defp atom_to_side(:sell_order), do: "SELL order"
+
+  defp status_to_atom("NEW"), do: :new
+  defp status_to_atom("FILLED"), do: :filled
+  defp status_to_atom("PARTIALLY_FILLED"), do: :partially_filled
+  defp status_to_atom("CANCELLED"), do: :cancelled
 
   def generate_decision(
         %TradeEvent{price: price},
@@ -106,8 +158,8 @@ defmodule Naive.Strategy do
   end
 
   def generate_decision(
-        %TradeEvent{
-          buyer_order_id: order_id
+        %OrderEvent{
+          order_id: order_id
         },
         %Position{
           buy_order: %Exchange.Order{
@@ -123,7 +175,7 @@ defmodule Naive.Strategy do
   end
 
   def generate_decision(
-        %TradeEvent{},
+        %OrderEvent{},
         %Position{
           buy_order: %Exchange.Order{
             status: :filled,
@@ -141,8 +193,8 @@ defmodule Naive.Strategy do
   end
 
   def generate_decision(
-        %TradeEvent{
-          buyer_order_id: order_id
+        %OrderEvent{
+          order_id: order_id
         },
         %Position{
           buy_order: %Exchange.Order{
@@ -152,11 +204,11 @@ defmodule Naive.Strategy do
         _positions,
         _settings
       ) do
-    :fetch_buy_order
+    :update_buy_position
   end
 
   def generate_decision(
-        %TradeEvent{},
+        %OrderEvent{},
         %Position{
           sell_order: %Exchange.Order{
             status: :filled
@@ -173,8 +225,8 @@ defmodule Naive.Strategy do
   end
 
   def generate_decision(
-        %TradeEvent{
-          seller_order_id: order_id
+        %OrderEvent{
+          order_id: order_id
         },
         %Position{
           sell_order: %Exchange.Order{
@@ -184,7 +236,7 @@ defmodule Naive.Strategy do
         _positions,
         _settings
       ) do
-    :fetch_sell_order
+    :update_sell_position
   end
 
   def generate_decision(
@@ -211,6 +263,10 @@ defmodule Naive.Strategy do
   end
 
   def generate_decision(%TradeEvent{}, %Position{}, _positions, _settings) do
+    :skip
+  end
+
+  def generate_decision(%OrderEvent{}, %Position{}, _positions, _settings) do
     :skip
   end
 
@@ -288,11 +344,14 @@ defmodule Naive.Strategy do
         "Placing a BUY order @ #{price}, quantity: #{quantity}"
     )
 
-    {:ok, %Exchange.Order{} = order} = @exchange_client.order_limit_buy(symbol, quantity, price)
+    case @exchange_client.order_limit_buy(symbol, quantity, price) do
+      {:ok, %Exchange.Order{} = order} ->
+        {:ok, %{position | buy_order: order}}
 
-    :ok = broadcast_order(order)
-
-    {:ok, %{position | buy_order: order}}
+      {:error, error} ->
+        @logger.info("Error when placing BUY order. Reason: #{error}")
+        {:error, error}
+    end
   end
 
   defp execute_decision(
@@ -311,41 +370,14 @@ defmodule Naive.Strategy do
         "Placing a SELL order @ #{sell_price}, quantity: #{quantity}"
     )
 
-    {:ok, %Exchange.Order{} = order} =
-      @exchange_client.order_limit_sell(symbol, quantity, sell_price)
+    case @exchange_client.order_limit_sell(symbol, quantity, sell_price) do
+      {:ok, %Exchange.Order{} = order} ->
+        {:ok, %{position | sell_order: order}}
 
-    :ok = broadcast_order(order)
-
-    {:ok, %{position | sell_order: order}}
-  end
-
-  defp execute_decision(
-         :fetch_buy_order,
-         %Position{
-           id: id,
-           symbol: symbol,
-           buy_order:
-             %Exchange.Order{
-               id: order_id,
-               timestamp: timestamp
-             } = buy_order
-         } = position,
-         _settings
-       ) do
-    @logger.info("Position (#{symbol}/#{id}): The BUY order is now partially filled")
-
-    {:ok, %Exchange.Order{} = current_buy_order} =
-      @exchange_client.get_order(
-        symbol,
-        timestamp,
-        order_id
-      )
-
-    :ok = broadcast_order(current_buy_order)
-
-    buy_order = %{buy_order | status: current_buy_order.status}
-
-    {:ok, %{position | buy_order: buy_order}}
+      {:error, error} ->
+        @logger.info("Error when placing SELL order. Reason: #{error}")
+        {:error, error}
+    end
   end
 
   defp execute_decision(
@@ -361,35 +393,6 @@ defmodule Naive.Strategy do
     @logger.info("Position (#{symbol}/#{id}): Trade cycle finished")
 
     {:ok, new_position}
-  end
-
-  defp execute_decision(
-         :fetch_sell_order,
-         %Position{
-           id: id,
-           symbol: symbol,
-           sell_order:
-             %Exchange.Order{
-               id: order_id,
-               timestamp: timestamp
-             } = sell_order
-         } = position,
-         _settings
-       ) do
-    @logger.info("Position (#{symbol}/#{id}): The SELL order is now partially filled")
-
-    {:ok, %Exchange.Order{} = current_sell_order} =
-      @exchange_client.get_order(
-        symbol,
-        timestamp,
-        order_id
-      )
-
-    :ok = broadcast_order(current_sell_order)
-
-    sell_order = %{sell_order | status: current_sell_order.status}
-
-    {:ok, %{position | sell_order: sell_order}}
   end
 
   defp execute_decision(
@@ -409,14 +412,6 @@ defmodule Naive.Strategy do
 
   defp execute_decision(:skip, state, _settings) do
     {:ok, state}
-  end
-
-  defp broadcast_order(%Exchange.Order{} = order) do
-    @pubsub_client.broadcast(
-      Core.PubSub,
-      "ORDERS:#{order.symbol}",
-      order
-    )
   end
 
   def fetch_symbol_settings(symbol) do
