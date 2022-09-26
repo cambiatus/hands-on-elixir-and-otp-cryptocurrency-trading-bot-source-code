@@ -50,42 +50,39 @@ defmodule Core.Exchange.Binance do
   end
 
   @impl Core.Exchange
-  def order_limit_buy(symbol, quantity, price) do
-    case Futures.new_order(%{
-           symbol: symbol,
-           side: "BUY",
-           type: "LIMIT",
-           quantity: quantity,
-           price: price,
-           timeInForce: "GTC"
-         }) do
-      {:ok, order} ->
-        {:ok,
-         %Exchange.Order{
-           id: order["orderId"],
-           price: order["price"],
-           quantity: order["origQty"],
-           side: :buy,
-           status: :new,
-           symbol: order["symbol"],
-           timestamp: order["updateTime"]
-         }}
-
-      {:error, error} ->
-        {:error, error}
-    end
+  def order_limit_buy(symbol, quantity, price, time_in_force \\ "GTC") do
+    new_order(symbol, "BUY", "LIMIT", quantity, price, time_in_force)
   end
 
   @impl Core.Exchange
-  def order_limit_sell(symbol, quantity, price) do
-    case Futures.new_order(%{
-           symbol: symbol,
-           side: "SELL",
-           type: "LIMIT",
-           quantity: quantity,
-           price: price,
-           timeInForce: "GTC"
-         }) do
+  def order_market_buy(symbol, quantity) do
+    new_order(symbol, "BUY", "MARKET", quantity, nil, nil)
+  end
+
+  @impl Core.Exchange
+  def order_limit_sell(symbol, quantity, price, time_in_force \\ "GTC") do
+    new_order(symbol, "SELL", "LIMIT", quantity, price, time_in_force)
+  end
+
+  @impl Core.Exchange
+  def order_market_sell(symbol, quantity) do
+    new_order(symbol, "SELL", "MARKET", quantity, nil, nil)
+  end
+
+  defp new_order(symbol, side, type, quantity, price, time_in_force) do
+    args =
+      %{
+        symbol: symbol,
+        side: side,
+        type: type,
+        quantity: quantity,
+        price: price,
+        time_in_force: time_in_force
+      }
+      |> Enum.filter(fn {_, v} -> v end)
+      |> Enum.into(%{})
+
+    case Futures.new_order(args) do
       {:ok, order} ->
         {:ok,
          %Exchange.Order{
