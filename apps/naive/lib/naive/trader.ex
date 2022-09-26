@@ -1,7 +1,7 @@
 defmodule Naive.Trader do
   use GenServer, restart: :temporary
 
-  alias Core.Struct.{OrderEvent, TradeEvent}
+  alias Core.Struct.{KlineEvent, OrderEvent, TradeEvent}
   alias Naive.Strategy
 
   require Logger
@@ -11,10 +11,11 @@ defmodule Naive.Trader do
   @registry :naive_traders
 
   defmodule State do
-    @enforce_keys [:settings, :positions]
-    defstruct [:settings, positions: []]
+    @enforce_keys [:settings, :positions, :data]
+    defstruct [:settings, positions: [], data: %{}]
   end
 
+  @spec start_link(binary) :: :ignore | {:error, any} | {:ok, pid}
   def start_link(symbol) do
     symbol = String.upcase(symbol)
 
@@ -30,7 +31,7 @@ defmodule Naive.Trader do
 
     @pubsub_client.subscribe(
       Core.PubSub,
-      "TRADE_EVENTS:#{symbol}"
+      "KLINE_EVENTS:#{symbol}"
     )
 
     {:ok, nil, {:continue, {:start_position, symbol}}}
@@ -40,7 +41,19 @@ defmodule Naive.Trader do
     settings = Strategy.fetch_symbol_settings(symbol)
     positions = [Strategy.generate_fresh_position(settings)]
 
-    {:noreply, %State{settings: settings, positions: positions}}
+    # TODO: Remove hardcoded interval and number of datapoints
+
+    initial_data =
+      case Core.Exchange.Binance.get_recent_klines_data(symbol, "1m", 50) do
+        {:ok, initial_data} ->
+          Map.put(initial_data, :complete, List.duplicate(true, 50))
+
+        {:error, error} ->
+          Logger.info("Could not get historical data for #{symbol} at 1m")
+          {:stop, error, nil}
+      end
+
+    {:noreply, %State{settings: settings, positions: positions, data: initial_data}}
   end
 
   def notify(:settings_updated, settings) do
@@ -79,6 +92,20 @@ defmodule Naive.Trader do
     end
   end
 
+  def handle_info(%KlineEvent{} = kline_event, %State{data: data} = state) do
+    data = append_kline(kline_event, data)
+
+    case Naive.Strategy.execute(kline_event, state.positions, state.settings, data) do
+      {:ok, updated_positions} ->
+        {:noreply, %{state | positions: updated_positions, data: data}}
+
+      :exit ->
+        {:ok, _settings} = Strategy.update_status(kline_event.symbol, "off")
+        Logger.info("Trading for #{kline_event.symbol} stopped")
+        {:stop, :normal, state}
+    end
+  end
+
   def handle_info(%OrderEvent{} = order_event, %State{} = state) do
     case Naive.Strategy.execute(order_event, state.positions, state.settings) do
       {:ok, updated_positions} ->
@@ -89,6 +116,14 @@ defmodule Naive.Trader do
         Logger.info("Trading for #{order_event.symbol} stopped")
         {:stop, :normal, state}
     end
+  end
+
+  defp append_kline(kline, data) do
+    data
+    |> Map.keys()
+    |> Enum.reduce(%{}, fn key, appended ->
+      Map.put(appended, key, Map.get(data, key) ++ [Map.get(kline, key)])
+    end)
   end
 
   defp call_trader(symbol, data) do
