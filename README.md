@@ -34,7 +34,7 @@ $ mix setup
 Note: This project uses python 3.8, so make sure you have it installed before proceeding
 
 ```
-$ python setup_python.py
+$ python python_setup.py
 ```
 
 ## Further setup (danger zone)
