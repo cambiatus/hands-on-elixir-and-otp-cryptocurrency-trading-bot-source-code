@@ -32,7 +32,8 @@ config :streamer,
 
 config :strategies,
   python_workers: 5,
-  python_worker_overflow: 2
+  python_worker_overflow: 2,
+  exchange_client: Core.Exchange.Binance
 
 config :streamer, Streamer.Repo,
   database: "streamer",
