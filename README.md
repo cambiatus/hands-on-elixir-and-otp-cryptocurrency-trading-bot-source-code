@@ -29,12 +29,21 @@ Creating hedgehog_db_1 ... done
 $ mix setup
 ```
 
-4. Create python virtualenv and install dependecies:
+4. Create python virtualenv:
 
-Note: This project uses python 3.8, so make sure you have it installed before proceeding
+Note: This setup requires installing the python dependency [`virtualenv`](https://pypi.org/project/virtualenv/)
 
 ```
-$ python python_setup.py
+$ python -m virtualenv apps/strategies/priv/python
+```
+
+5. Activate virtualenv and install dependencies:
+
+```
+$ source apps/strategies/priv/python/bin/activate
+```
+```
+$ pip install -r apps/strategies/priv/python/requirements.txt
 ```
 
 ## Further setup (danger zone)
