@@ -34,7 +34,6 @@ defmodule Naive.MixProject do
   defp deps do
     [
       {:binance, git: "https://github.com/cambiatus/binance.ex"},
-      {:strategies, in_umbrella: true},
       {:binance_mock, in_umbrella: true},
       {:core, in_umbrella: true},
       {:data_warehouse, in_umbrella: true, only: :test},
