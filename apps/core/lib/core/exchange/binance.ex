@@ -3,7 +3,8 @@ defmodule Core.Exchange.Binance do
 
   alias Core.Exchange
   alias Binance.Futures
-  alias Binance.{FuturesOrderResponse, FuturesOrder}
+
+  require Poison
 
   @impl Core.Exchange
   def fetch_symbols() do
@@ -49,46 +50,39 @@ defmodule Core.Exchange.Binance do
   end
 
   @impl Core.Exchange
-  def order_limit_buy(symbol, quantity, price) do
-    case Futures.new_order(
-           symbol,
-           "BUY",
-           "LIMIT",
-           %{
-             quantity: quantity,
-             price: price,
-             timeInForce: "GTC"
-           }
-         ) do
-      {:ok, order} ->
-        {:ok,
-         %Exchange.Order{
-           id: order["orderId"],
-           price: order["price"],
-           quantity: order["origQty"],
-           side: :buy,
-           status: :new,
-           symbol: order["symbol"],
-           timestamp: order["updateTime"]
-         }}
-
-      {:error, error} ->
-        {:error, error}
-    end
+  def order_limit_buy(symbol, quantity, price, time_in_force \\ "GTC") do
+    new_order(symbol, "BUY", "LIMIT", quantity, price, time_in_force)
   end
 
   @impl Core.Exchange
-  def order_limit_sell(symbol, quantity, price) do
-    case Futures.new_order(
-           symbol,
-           "SELL",
-           "LIMIT",
-           %{
-             quantity: quantity,
-             price: price,
-             timeInForce: "GTC"
-           }
-         ) do
+  def order_market_buy(symbol, quantity) do
+    new_order(symbol, "BUY", "MARKET", quantity, nil, nil)
+  end
+
+  @impl Core.Exchange
+  def order_limit_sell(symbol, quantity, price, time_in_force \\ "GTC") do
+    new_order(symbol, "SELL", "LIMIT", quantity, price, time_in_force)
+  end
+
+  @impl Core.Exchange
+  def order_market_sell(symbol, quantity) do
+    new_order(symbol, "SELL", "MARKET", quantity, nil, nil)
+  end
+
+  defp new_order(symbol, side, type, quantity, price, time_in_force) do
+    args =
+      %{
+        symbol: symbol,
+        side: side,
+        type: type,
+        quantity: quantity,
+        price: price,
+        time_in_force: time_in_force
+      }
+      |> Enum.filter(fn {_, v} -> v end)
+      |> Enum.into(%{})
+
+    case Futures.new_order(args) do
       {:ok, order} ->
         {:ok,
          %Exchange.Order{
@@ -132,6 +126,35 @@ defmodule Core.Exchange.Binance do
     end
   end
 
+  @doc """
+  Use this function to get the `n` most recent entries in klines data, where n
+  is defined by the datapoints argument.
+
+  If you want to better define other parameters use get_klines/5 instead.
+  """
+  def get_recent_klines_data(symbol, interval, datapoints) do
+    case Futures.get_server_time() do
+      {:ok, %{"serverTime" => end_time}} ->
+        start_time = end_time - datapoints * interval_to_miliseconds(interval)
+        get_klines(symbol, interval, nil, start_time, end_time)
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
+  @doc """
+  Use this function to get klines data with the specified paramenters.
+
+  If you want to specify how many datapoints you wish to retrieve use get_recent_klines_data/3 instead.
+  """
+  def get_klines(symbol, interval, limit, start_time, end_time) do
+    case Futures.get_klines(symbol, interval, limit, start_time, end_time) do
+      {:ok, data} -> {:ok, decode_klines(data)}
+      {:error, error} -> {:error, error}
+    end
+  end
+
   defp fetch_symbol_filters(symbol, exchange_info) do
     symbol_filters =
       exchange_info
@@ -154,5 +177,50 @@ defmodule Core.Exchange.Binance do
       tick_size: tick_size,
       step_size: step_size
     }
+  end
+
+  defp decode_klines(data) do
+    pattern = %{
+      start_time: [],
+      open_price: [],
+      high_price: [],
+      low_price: [],
+      close_price: [],
+      volume: [],
+      close_time: [],
+      quote_asset_volume: [],
+      number_of_trades: []
+    }
+
+    data
+    |> Enum.reverse()
+    |> Enum.reduce(pattern, fn entry, result ->
+      %{
+        start_time: [Enum.at(entry, 0) | result.start_time],
+        open_price: [Enum.at(entry, 1) | result.open_price],
+        high_price: [Enum.at(entry, 2) | result.high_price],
+        low_price: [Enum.at(entry, 3) | result.low_price],
+        close_price: [Enum.at(entry, 4) | result.close_price],
+        volume: [Enum.at(entry, 5) | result.volume],
+        close_time: [Enum.at(entry, 6) | result.close_time],
+        quote_asset_volume: [Enum.at(entry, 7) | result.quote_asset_volume],
+        number_of_trades: [Enum.at(entry, 8) | result.number_of_trades]
+      }
+    end)
+  end
+
+  defp interval_to_miliseconds(interval) do
+    converter = %{
+      "m" => 60,
+      "h" => 60 * 60,
+      "d" => 60 * 60 * 24,
+      "w" => 60 * 60 * 24 * 7,
+      "M" => 60 * 60 * 24 * 30
+    }
+
+    unit = String.at(interval, -1)
+    time = interval |> String.replace(unit, "") |> String.to_integer()
+
+    converter[unit] * time * 1000
   end
 end

@@ -1,8 +1,7 @@
 defmodule DataWarehouse.Subscriber.Worker do
   use GenServer
 
-  alias Core.Exchange
-  alias Core.Struct.OrderEvent
+  alias Core.Struct.{KlineEvent, OrderEvent, TradeEvent}
 
   require Logger
 
@@ -33,12 +32,23 @@ defmodule DataWarehouse.Subscriber.Worker do
      }}
   end
 
-  def handle_info(%Core.Struct.TradeEvent{} = trade_event, state) do
+  def handle_info(%TradeEvent{} = trade_event, state) do
     opts =
       trade_event
       |> Map.from_struct()
 
     struct!(DataWarehouse.Schema.TradeEvent, opts)
+    |> DataWarehouse.Repo.insert()
+
+    {:noreply, state}
+  end
+
+  def handle_info(%KlineEvent{} = kline_event, state) do
+    opts =
+      kline_event
+      |> Map.from_struct()
+
+    struct!(DataWarehouse.Schema.KlineEvent, opts)
     |> DataWarehouse.Repo.insert()
 
     {:noreply, state}
@@ -67,11 +77,4 @@ defmodule DataWarehouse.Subscriber.Worker do
   defp via_tuple(topic) do
     {:via, Registry, {:subscriber_workers, topic}}
   end
-
-  defp atom_to_side(:buy), do: "BUY"
-  defp atom_to_side(:sell), do: "SELL"
-
-  defp atom_to_status(:new), do: "NEW"
-  defp atom_to_status(:filled), do: "FILLED"
-  defp atom_to_status(:partially_filled), do: "PARTIALLY_FILLED"
 end

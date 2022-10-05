@@ -30,6 +30,10 @@ config :streamer,
   binance_client: Core.Exchange.Binance,
   ecto_repos: [Streamer.Repo]
 
+config :strategies,
+  python_workers: 5,
+  python_worker_overflow: 2
+
 config :streamer, Streamer.Repo,
   database: "streamer",
   username: "postgres",
