@@ -9,6 +9,7 @@ defmodule Naive.Strategy do
   @exchange_client Application.compile_env(:naive, :exchange_client)
   @logger Application.compile_env(:core, :logger)
   @repo Application.compile_env(:naive, :repo)
+  @pubsub_client Application.compile_env(:core, :pubsub_client)
 
   defmodule Position do
     @enforce_keys [
@@ -38,28 +39,28 @@ defmodule Naive.Strategy do
     ]
   end
 
-  def execute(%TradeEvent{} = trade_event, positions, settings, data) do
+  def execute(%TradeEvent{} = trade_event, positions, settings, data, trader_id) do
     generate_decisions(positions, [], trade_event, settings, data)
     |> Enum.map(fn {decision, position} ->
-      Task.async(fn -> execute_decision(decision, position, settings) end)
+      Task.async(fn -> execute_decision(decision, position, settings, trader_id) end)
     end)
     |> Task.await_many()
     |> then(&parse_results/1)
   end
 
-  def execute(%OrderEvent{} = order_event, positions, settings, data) do
+  def execute(%OrderEvent{} = order_event, positions, settings, data, trader_id) do
     generate_decisions(positions, [], order_event, settings, data)
     |> Enum.map(fn {decision, position} ->
-      Task.async(fn -> execute_decision(decision, position, settings) end)
+      Task.async(fn -> execute_decision(decision, position, settings, trader_id) end)
     end)
     |> Task.await_many()
     |> then(&parse_results/1)
   end
 
-  def execute(%KlineEvent{} = kline_event, positions, settings, data) do
+  def execute(%KlineEvent{} = kline_event, positions, settings, data, trader_id) do
     generate_decisions(positions, [], kline_event, settings, data)
     |> Enum.map(fn {decision, position} ->
-      Task.async(fn -> execute_decision(decision, position, settings) end)
+      Task.async(fn -> execute_decision(decision, position, settings, trader_id) end)
     end)
     |> Task.await_many()
     |> then(&parse_results/1)
@@ -102,7 +103,12 @@ defmodule Naive.Strategy do
         )
 
       :update_buy_position ->
-        current_buy_order = update_order_position(position, :buy_order, trade_event.order_status)
+        current_buy_order =
+          update_order_position(
+            position,
+            :buy_order,
+            trade_event
+          )
 
         generate_decisions(
           rest,
@@ -114,7 +120,11 @@ defmodule Naive.Strategy do
 
       :update_sell_position ->
         current_sell_order =
-          update_order_position(position, :sell_order, trade_event.order_status)
+          update_order_position(
+            position,
+            :sell_order,
+            trade_event
+          )
 
         generate_decisions(
           rest,
@@ -135,23 +145,32 @@ defmodule Naive.Strategy do
     end
   end
 
-  def update_order_position(position, side, new_status) do
-    unless new_status == "NEW" do
+  def update_order_position(position, side, order_event) do
+    new_status = status_to_atom(order_event.order_status)
+
+    unless order_event.order_status == "NEW" do
       @logger.info(
         "Position (#{position.symbol}/#{position.id}): The " <>
-          "#{atom_to_side(side)} has been #{new_status}"
+          "#{order_event.side} has been #{order_event.order_status}"
       )
     end
 
-    new_status = status_to_atom(new_status)
+    broadcast_order(%Exchange.Order{
+      id: order_event.order_id,
+      symbol: position.symbol,
+      price: order_event.original_price,
+      quantity: order_event.original_quantity,
+      status: order_event.order_status,
+      side: order_event.side,
+      realized_quantity: order_event.order_filled_accumulated_quantity,
+      average_price: order_event.average_price,
+      timestamp: order_event.event_time
+    })
 
     position
     |> Map.get(side)
     |> Map.put(:status, new_status)
   end
-
-  defp atom_to_side(:buy_order), do: "BUY order"
-  defp atom_to_side(:sell_order), do: "SELL order"
 
   defp status_to_atom("NEW"), do: :new
   defp status_to_atom("FILLED"), do: :filled
@@ -167,33 +186,26 @@ defmodule Naive.Strategy do
           position: position
         },
         _positions,
-        _settings,
+        %{strategy: strategy, strategy_args: strategy_args} = _settings,
         data
       ) do
-    args = [Poison.encode!(data), position, 10, 50]
-
-    case Strategies.Caller.call_python(:sma, :execute_strategy, args) do
-      {:ok, [['BUY', 'MARKET', quantity], position]} ->
+    case Strategies.execute_strategy(strategy, data, position, strategy_args) do
+      {:ok, [["BUY", "MARKET", quantity], position]} ->
         {:place_buy_order, "MARKET", quantity, position}
 
-      {:ok, [['BUY', 'LIMIT', price, quantity], position]} ->
+      {:ok, [["BUY", "LIMIT", price, quantity], position]} ->
         {:place_buy_order, "LIMIT", price, quantity, position}
 
-      {:ok, [['SELL', 'MARKET', quantity], position]} ->
+      {:ok, [["SELL", "MARKET", quantity], position]} ->
         {:place_sell_order, "MARKET", quantity, position}
 
-      {:ok, [['SELL', 'LIMIT', price, quantity], position]} ->
+      {:ok, [["SELL", "LIMIT", price, quantity], position]} ->
         {:place_sell_order, "LIMIT", price, quantity, position}
 
       {:ok, _data = [[], _position]} ->
         :skip
 
-      response ->
-        @logger.info(
-          "Unexpected response from python strategy" <>
-            "#{response}"
-        )
-
+      :error ->
         :error
     end
   end
@@ -214,33 +226,6 @@ defmodule Naive.Strategy do
         _data
       ) do
     :skip
-  end
-
-  def generate_decision(
-        %OrderEvent{},
-        %Position{
-          buy_order: %Exchange.Order{
-            status: :filled,
-            price: buy_price
-          },
-          sell_order: nil,
-          profit_interval: profit_interval,
-          tick_size: tick_size
-        },
-        _positions,
-        _settings,
-        _data
-      ) do
-    sell_price =
-      Strategies.Caller.call_python(:naive, :calculate_sell_price, [
-        buy_price,
-        to_string(profit_interval),
-        tick_size
-      ])
-      |> elem(1)
-      |> to_string()
-
-    {:place_sell_order, sell_price}
   end
 
   def generate_decision(
@@ -390,13 +375,15 @@ defmodule Naive.Strategy do
            tick_size: tick_size,
            step_size: step_size
          } = position,
-         _settings
+         _settings,
+         trader_id
        ) do
     [price, quantity] =
       order_helper(symbol, id, "LIMIT", "BUY", price, quantity, tick_size, step_size)
 
     case @exchange_client.order_limit_buy(symbol, quantity, price) do
       {:ok, %Exchange.Order{} = order} ->
+        new_order(order, trader_id)
         {:ok, %{position | buy_order: order, position: python_position}}
 
       {:error, error} ->
@@ -412,12 +399,14 @@ defmodule Naive.Strategy do
            symbol: symbol,
            step_size: step_size
          } = position,
-         _settings
+         _settings,
+         trader_id
        ) do
     [_, quantity] = order_helper(symbol, id, "MARKET", "BUY", nil, quantity, nil, step_size)
 
     case @exchange_client.order_market_buy(symbol, quantity) do
       {:ok, %Exchange.Order{} = order} ->
+        new_order(order, trader_id)
         {:ok, %{position | buy_order: order, position: python_position}}
 
       {:error, error} ->
@@ -437,13 +426,15 @@ defmodule Naive.Strategy do
              quantity: quantity
            }
          } = position,
-         _settings
+         _settings,
+         trader_id
        ) do
     [sell_price, quantity] =
       order_helper(symbol, id, "LIMIT", "SELL", sell_price, quantity, tick_size, step_size)
 
     case @exchange_client.order_limit_sell(symbol, quantity, sell_price) do
       {:ok, %Exchange.Order{} = order} ->
+        new_order(order, trader_id)
         {:ok, %{position | sell_order: order, position: python_position}}
 
       {:error, error} ->
@@ -459,12 +450,14 @@ defmodule Naive.Strategy do
            symbol: symbol,
            step_size: step_size
          } = position,
-         _settings
+         _settings,
+         trader_id
        ) do
     [_, quantity] = order_helper(symbol, id, "MARKET", "SELL", nil, quantity, nil, step_size)
 
     case @exchange_client.order_market_sell(symbol, quantity) do
       {:ok, %Exchange.Order{} = order} ->
+        new_order(order, trader_id)
         {:ok, %{position | sell_order: order, position: python_position}}
 
       {:error, error} ->
@@ -479,7 +472,8 @@ defmodule Naive.Strategy do
            id: id,
            symbol: symbol
          },
-         settings
+         settings,
+         _trader_id
        ) do
     new_position = generate_fresh_position(settings)
 
@@ -494,7 +488,8 @@ defmodule Naive.Strategy do
            id: id,
            symbol: symbol
          },
-         settings
+         settings,
+         _trader_id
        ) do
     new_position = generate_fresh_position(settings)
 
@@ -503,7 +498,7 @@ defmodule Naive.Strategy do
     {:ok, new_position}
   end
 
-  defp execute_decision(:skip, state, _settings) do
+  defp execute_decision(:skip, state, _settings, _trader_id) do
     {:ok, state}
   end
 
@@ -586,10 +581,24 @@ defmodule Naive.Strategy do
     }
   end
 
-  def update_status(symbol, status)
-      when is_binary(symbol) and is_binary(status) do
-    @repo.get_by(Settings, symbol: symbol)
+  def update_status(id, status)
+      when is_binary(status) do
+    @repo.get_by(Traders: id)
     |> Ecto.Changeset.change(%{status: status})
     |> @repo.update()
+  end
+
+  defp new_order(%Exchange.Order{} = order, trader_id) do
+    order
+    |> Map.put(:trader_id, trader_id)
+    |> broadcast_order()
+  end
+
+  defp broadcast_order(%Exchange.Order{} = order) do
+    @pubsub_client.broadcast(
+      Core.PubSub,
+      "ORDERS:#{order.symbol}",
+      order
+    )
   end
 end
