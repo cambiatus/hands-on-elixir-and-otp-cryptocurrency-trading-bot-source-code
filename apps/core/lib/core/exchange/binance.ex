@@ -39,8 +39,8 @@ defmodule Core.Exchange.Binance do
            symbol: order["symbol"],
            price: order["price"],
            quantity: order["origQty"],
-           side: side_to_atom(order["side"]),
-           status: status_to_atom(order["status"]),
+           side: order["side"],
+           status: order["status"],
            timestamp: order["updateTime"]
          }}
 
@@ -72,9 +72,6 @@ defmodule Core.Exchange.Binance do
   defp new_order(symbol, side, type, quantity, price, time_in_force) do
     args =
       %{
-        symbol: symbol,
-        side: side,
-        type: type,
         quantity: quantity,
         price: price,
         time_in_force: time_in_force
@@ -82,16 +79,20 @@ defmodule Core.Exchange.Binance do
       |> Enum.filter(fn {_, v} -> v end)
       |> Enum.into(%{})
 
-    case Futures.new_order(args) do
+    case Futures.new_order(symbol, side, type, args) do
       {:ok, order} ->
         {:ok,
          %Exchange.Order{
            id: order["orderId"],
            price: order["price"],
            quantity: order["origQty"],
-           side: :sell,
-           status: :new,
+           side: order["side"],
+           status: order["status"],
            symbol: order["symbol"],
+           order_id: order["orderId"],
+           position_side: order["positionSide"],
+           time_in_force: order["timeInForce"],
+           type: order["type"],
            timestamp: order["updateTime"]
          }}
 
@@ -136,7 +137,11 @@ defmodule Core.Exchange.Binance do
     case Futures.get_server_time() do
       {:ok, %{"serverTime" => end_time}} ->
         start_time = end_time - datapoints * interval_to_miliseconds(interval)
-        get_klines(symbol, interval, nil, start_time, end_time)
+
+        # TODO: Remove the "+ 2" from the end_time
+        # It is there to help ensure that the end time sent to binance is actually the current time and not slightly in the past
+
+        get_klines(symbol, interval, nil, start_time, end_time + 2)
 
       {:error, error} ->
         {:error, error}
