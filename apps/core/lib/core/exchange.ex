@@ -13,14 +13,36 @@ defmodule Core.Exchange do
     @type t :: %__MODULE__{
             id: non_neg_integer(),
             symbol: String.t(),
-            price: number(),
-            quantity: number(),
-            side: :buy | :sell,
-            status: :new | :filled,
-            timestamp: non_neg_integer()
+            price: String.t(),
+            quantity: String.t(),
+            side: String.t(),
+            status: String.t(),
+            type: String.t(),
+            time_in_force: String.t(),
+            average_price: String.t(),
+            order_id: number(),
+            realized_quantity: String.t(),
+            position_side: String.t(),
+            timestamp: number(),
+            trader_id: String.t()
           }
 
-    defstruct [:id, :symbol, :price, :quantity, :side, :status, :timestamp]
+    defstruct [
+      :id,
+      :symbol,
+      :price,
+      :quantity,
+      :side,
+      :status,
+      :type,
+      :time_in_force,
+      :average_price,
+      :order_id,
+      :realized_quantity,
+      :position_side,
+      :timestamp,
+      :trader_id
+    ]
   end
 
   @callback fetch_symbols() ::
