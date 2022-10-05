@@ -51,38 +51,46 @@ defmodule Core.Exchange.Binance do
 
   @impl Core.Exchange
   def order_limit_buy(symbol, quantity, price, time_in_force \\ "GTC") do
-    new_order(symbol, "BUY", "LIMIT", quantity, price, time_in_force)
+    args = %{
+      quantity: quantity,
+      price: price,
+      time_in_force: time_in_force
+    }
+
+    new_order(symbol, "BUY", "LIMIT", args)
   end
 
   @impl Core.Exchange
   def order_market_buy(symbol, quantity) do
-    new_order(symbol, "BUY", "MARKET", quantity, nil, nil)
+    args = %{
+      quantity: quantity
+    }
+
+    new_order(symbol, "BUY", "MARKET", args)
   end
 
   @impl Core.Exchange
   def order_limit_sell(symbol, quantity, price, time_in_force \\ "GTC") do
-    new_order(symbol, "SELL", "LIMIT", quantity, price, time_in_force)
+    args = %{
+      quantity: quantity,
+      price: price,
+      time_in_force: time_in_force
+    }
+
+    new_order(symbol, "SELL", "LIMIT", args)
   end
 
   @impl Core.Exchange
   def order_market_sell(symbol, quantity) do
-    new_order(symbol, "SELL", "MARKET", quantity, nil, nil)
+    args = %{
+      quantity: quantity
+    }
+
+    new_order(symbol, "SELL", "MARKET", args)
   end
 
-  defp new_order(symbol, side, type, quantity, price, time_in_force) do
-    args =
-      %{
-        symbol: symbol,
-        side: side,
-        type: type,
-        quantity: quantity,
-        price: price,
-        time_in_force: time_in_force
-      }
-      |> Enum.filter(fn {_, v} -> v end)
-      |> Enum.into(%{})
-
-    case Futures.new_order(args) do
+  defp new_order(symbol, side, type, args) do
+    case Futures.new_order(symbol, side, type, args) do
       {:ok, order} ->
         {:ok,
          %Exchange.Order{
