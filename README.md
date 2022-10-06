@@ -63,16 +63,16 @@ config :binance,
 iex -S mix
 
 # connect to the Binance and stream into PubSub
-Streamer.start_streaming("xrpusdt")
+Streamer.start_streaming("xrpusdt", "1m")
 
 # to store trade_events in db
-DataWarehouse.start_storing("trade_events", "xrpusdt")
+DataWarehouse.start_storing("kline_events", "xrpusdt", "1m")
 
 # to store orders in db
 DataWarehouse.start_storing("orders", "xrpusdt")
 
 # turn on naive strategy
-Naive.start_trading("XRPUSDT")
+Naive.start_trading("XRPUSDT", :sma, "1m", %{sma_s: 10, sma_l: 50})
 ```
 
 ## Postgres cheat sheet
