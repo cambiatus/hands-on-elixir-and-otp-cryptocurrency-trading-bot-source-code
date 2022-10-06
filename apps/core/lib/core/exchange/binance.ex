@@ -54,19 +54,10 @@ defmodule Core.Exchange.Binance do
     args = %{
       quantity: quantity,
       price: price,
-      time_in_force: time_in_force
+      timeInForce: time_in_force
     }
 
     new_order(symbol, "BUY", "LIMIT", args)
-  end
-
-  @impl Core.Exchange
-  def order_market_buy(symbol, quantity) do
-    args = %{
-      quantity: quantity
-    }
-
-    new_order(symbol, "BUY", "MARKET", args)
   end
 
   @impl Core.Exchange
@@ -74,19 +65,10 @@ defmodule Core.Exchange.Binance do
     args = %{
       quantity: quantity,
       price: price,
-      time_in_force: time_in_force
+      timeInForce: time_in_force
     }
 
     new_order(symbol, "SELL", "LIMIT", args)
-  end
-
-  @impl Core.Exchange
-  def order_market_sell(symbol, quantity) do
-    args = %{
-      quantity: quantity
-    }
-
-    new_order(symbol, "SELL", "MARKET", args)
   end
 
   defp new_order(symbol, side, type, args) do
