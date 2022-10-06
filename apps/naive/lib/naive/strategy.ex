@@ -173,17 +173,11 @@ defmodule Naive.Strategy do
     args = [Poison.encode!(data), position, 10, 50]
 
     case Strategies.Caller.call_python(:sma, :execute_strategy, args) do
-      {:ok, [['BUY', 'MARKET', quantity], position]} ->
-        {:place_buy_order, "MARKET", quantity, position}
-
       {:ok, [['BUY', 'LIMIT', price, quantity], position]} ->
-        {:place_buy_order, "LIMIT", price, quantity, position}
-
-      {:ok, [['SELL', 'MARKET', quantity], position]} ->
-        {:place_sell_order, "MARKET", quantity, position}
+        {:place_buy_order, "LIMIT", to_string(price), quantity, position}
 
       {:ok, [['SELL', 'LIMIT', price, quantity], position]} ->
-        {:place_sell_order, "LIMIT", price, quantity, position}
+        {:place_sell_order, "LIMIT", to_string(price), quantity, position}
 
       {:ok, _data = [[], _position]} ->
         :skip
@@ -406,69 +400,24 @@ defmodule Naive.Strategy do
   end
 
   defp execute_decision(
-         {:place_buy_order, "MARKET", quantity, python_position},
-         %Position{
-           id: id,
-           symbol: symbol,
-           step_size: step_size
-         } = position,
-         _settings
-       ) do
-    [_, quantity] = order_helper(symbol, id, "MARKET", "BUY", nil, quantity, nil, step_size)
-
-    case @exchange_client.order_market_buy(symbol, quantity) do
-      {:ok, %Exchange.Order{} = order} ->
-        {:ok, %{position | buy_order: order, position: python_position}}
-
-      {:error, error} ->
-        @logger.info("Error when placing BUY order. Reason: #{error}")
-        {:error, error}
-    end
-  end
-
-  defp execute_decision(
-         {:place_sell_order, sell_price, python_position},
+         {:place_sell_order, "LIMIT", price, quantity, python_position},
          %Position{
            id: id,
            symbol: symbol,
            tick_size: tick_size,
-           step_size: step_size,
-           buy_order: %Exchange.Order{
-             quantity: quantity
-           }
+           step_size: step_size
          } = position,
          _settings
        ) do
-    [sell_price, quantity] =
-      order_helper(symbol, id, "LIMIT", "SELL", sell_price, quantity, tick_size, step_size)
+    [price, quantity] =
+      order_helper(symbol, id, "LIMIT", "SELL", price, quantity, tick_size, step_size)
 
-    case @exchange_client.order_limit_sell(symbol, quantity, sell_price) do
+    case @exchange_client.order_limit_sell(symbol, quantity, price) do
       {:ok, %Exchange.Order{} = order} ->
         {:ok, %{position | sell_order: order, position: python_position}}
 
       {:error, error} ->
         @logger.info("Error when placing SELL order. Reason: #{error}")
-        {:error, error}
-    end
-  end
-
-  defp execute_decision(
-         {:place_sell_order, "MARKET", quantity, python_position},
-         %Position{
-           id: id,
-           symbol: symbol,
-           step_size: step_size
-         } = position,
-         _settings
-       ) do
-    [_, quantity] = order_helper(symbol, id, "MARKET", "SELL", nil, quantity, nil, step_size)
-
-    case @exchange_client.order_market_sell(symbol, quantity) do
-      {:ok, %Exchange.Order{} = order} ->
-        {:ok, %{position | sell_order: order, position: python_position}}
-
-      {:error, error} ->
-        @logger.info("Error when placing BUY order. Reason: #{error}")
         {:error, error}
     end
   end
@@ -529,9 +478,9 @@ defmodule Naive.Strategy do
        ) do
     price = validate_precision(price, tick_size)
 
-    # TODO: Remove hardcoding When quantity calculculation is implemented in the strategy module
+    # TODO: Remove hardcoding when quantity calculculation is implemented in the strategy module
 
-    quantity = 10 * step_size
+    quantity = step_size |> D.cast() |> elem(1) |> D.mult(500)
     quantity = validate_precision(quantity, step_size)
 
     @logger.info(
@@ -540,30 +489,6 @@ defmodule Naive.Strategy do
     )
 
     [price, quantity]
-  end
-
-  defp order_helper(
-         symbol,
-         id,
-         "MARKET",
-         side,
-         nil = _price,
-         quantity,
-         nil = _tick_size,
-         step_size
-       ) do
-    # quantity = validate_precision(quantity, step_size)
-    {:ok, mult} = D.cast(1000)
-    {:ok, step_size} = D.cast(step_size)
-
-    quantity = D.to_string(D.mult(mult, step_size), :normal)
-
-    @logger.info(
-      "Position (#{symbol}/#{id}): " <>
-        "Placing a MARKET #{side} order, quantity: #{quantity}"
-    )
-
-    [nil, quantity]
   end
 
   defp validate_precision(exact_number, precision) do
