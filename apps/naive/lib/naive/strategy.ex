@@ -1,6 +1,6 @@
 defmodule Naive.Strategy do
   alias Core.Exchange
-  alias Core.Struct.{OrderEvent, TradeEvent}
+  alias Core.Struct.{KlineEvent, OrderEvent, TradeEvent}
   alias Decimal, as: D
   alias Naive.Schema.Settings
 
@@ -33,12 +33,13 @@ defmodule Naive.Strategy do
       :rebuy_interval,
       :rebuy_notified,
       :tick_size,
-      :step_size
+      :step_size,
+      :position
     ]
   end
 
-  def execute(%TradeEvent{} = trade_event, positions, settings) do
-    generate_decisions(positions, [], trade_event, settings)
+  def execute(%TradeEvent{} = trade_event, positions, settings, data) do
+    generate_decisions(positions, [], trade_event, settings, data)
     |> Enum.map(fn {decision, position} ->
       Task.async(fn -> execute_decision(decision, position, settings) end)
     end)
@@ -46,8 +47,17 @@ defmodule Naive.Strategy do
     |> then(&parse_results/1)
   end
 
-  def execute(%OrderEvent{} = order_event, positions, settings) do
-    generate_decisions(positions, [], order_event, settings)
+  def execute(%OrderEvent{} = order_event, positions, settings, data) do
+    generate_decisions(positions, [], order_event, settings, data)
+    |> Enum.map(fn {decision, position} ->
+      Task.async(fn -> execute_decision(decision, position, settings) end)
+    end)
+    |> Task.await_many()
+    |> then(&parse_results/1)
+  end
+
+  def execute(%KlineEvent{} = kline_event, positions, settings, data) do
+    generate_decisions(positions, [], kline_event, settings, data)
     |> Enum.map(fn {decision, position} ->
       Task.async(fn -> execute_decision(decision, position, settings) end)
     end)
@@ -65,23 +75,30 @@ defmodule Naive.Strategy do
     |> then(&{:ok, &1})
   end
 
-  def generate_decisions([], generated_results, _trade_event, _settings) do
+  def generate_decisions([], generated_results, _trade_event, _settings, _data) do
     generated_results
   end
 
-  def generate_decisions([position | rest] = positions, generated_results, trade_event, settings) do
+  def generate_decisions(
+        [position | rest] = positions,
+        generated_results,
+        trade_event,
+        settings,
+        data
+      ) do
     current_positions = positions ++ (generated_results |> Enum.map(&elem(&1, 0)))
 
-    case generate_decision(trade_event, position, current_positions, settings) do
+    case generate_decision(trade_event, position, current_positions, settings, data) do
       :exit ->
-        generate_decisions(rest, generated_results, trade_event, settings)
+        generate_decisions(rest, generated_results, trade_event, settings, data)
 
       :rebuy ->
         generate_decisions(
           rest,
           [{:skip, %{position | rebuy_notified: true}}, {:rebuy, position}] ++ generated_results,
           trade_event,
-          settings
+          settings,
+          data
         )
 
       :update_buy_position ->
@@ -91,7 +108,8 @@ defmodule Naive.Strategy do
           rest,
           [{:skip, %{position | buy_order: current_buy_order}}] ++ generated_results,
           trade_event,
-          settings
+          settings,
+          data
         )
 
       :update_sell_position ->
@@ -102,7 +120,8 @@ defmodule Naive.Strategy do
           rest,
           [{:skip, %{position | sell_order: current_sell_order}}] ++ generated_results,
           trade_event,
-          settings
+          settings,
+          data
         )
 
       decision ->
@@ -110,7 +129,8 @@ defmodule Naive.Strategy do
           rest,
           [{decision, position} | generated_results],
           trade_event,
-          settings
+          settings,
+          data
         )
     end
   end
@@ -138,23 +158,38 @@ defmodule Naive.Strategy do
   defp status_to_atom("PARTIALLY_FILLED"), do: :partially_filled
   defp status_to_atom("CANCELLED"), do: :cancelled
 
+  # TODO: Reimplement position pattern matching as estabilished previously on the project
+  # instead of simlpy matching on this one clause and using the number outputed by the strategy
+
   def generate_decision(
-        %TradeEvent{price: price},
+        %KlineEvent{},
         %Position{
-          budget: budget,
-          buy_order: nil,
-          buy_down_interval: buy_down_interval,
-          tick_size: tick_size,
-          step_size: step_size
+          position: position
         },
         _positions,
-        _settings
+        _settings,
+        data
       ) do
-    price = calculate_buy_price(price, buy_down_interval, tick_size)
+    args = [Poison.encode!(data), position, 10, 50]
 
-    quantity = calculate_quantity(budget, price, step_size)
+    case Strategies.Caller.call_python(:sma, :execute_strategy, args) do
+      {:ok, [['BUY', 'LIMIT', price, quantity], position]} ->
+        {:place_buy_order, "LIMIT", to_string(price), quantity, position}
 
-    {:place_buy_order, price, quantity}
+      {:ok, [['SELL', 'LIMIT', price, quantity], position]} ->
+        {:place_sell_order, "LIMIT", to_string(price), quantity, position}
+
+      {:ok, _data = [[], _position]} ->
+        :skip
+
+      response ->
+        @logger.info(
+          "Unexpected response from python strategy" <>
+            "#{response}"
+        )
+
+        :error
+    end
   end
 
   def generate_decision(
@@ -169,7 +204,8 @@ defmodule Naive.Strategy do
           sell_order: %Exchange.Order{}
         },
         _positions,
-        _settings
+        _settings,
+        _data
       ) do
     :skip
   end
@@ -186,9 +222,18 @@ defmodule Naive.Strategy do
           tick_size: tick_size
         },
         _positions,
-        _settings
+        _settings,
+        _data
       ) do
-    sell_price = calculate_sell_price(buy_price, profit_interval, tick_size)
+    sell_price =
+      Strategies.Caller.call_python(:naive, :calculate_sell_price, [
+        buy_price,
+        to_string(profit_interval),
+        tick_size
+      ])
+      |> elem(1)
+      |> to_string()
+
     {:place_sell_order, sell_price}
   end
 
@@ -202,7 +247,8 @@ defmodule Naive.Strategy do
           }
         },
         _positions,
-        _settings
+        _settings,
+        _data
       ) do
     :update_buy_position
   end
@@ -215,7 +261,8 @@ defmodule Naive.Strategy do
           }
         },
         _positions,
-        settings
+        settings,
+        _data
       ) do
     if settings.status != "shutdown" do
       :finished
@@ -234,14 +281,15 @@ defmodule Naive.Strategy do
           }
         },
         _positions,
-        _settings
+        _settings,
+        _data
       ) do
     :update_sell_position
   end
 
   def generate_decision(
-        %TradeEvent{
-          price: current_price
+        %KlineEvent{
+          close_price: current_price
         },
         %Position{
           buy_order: %Exchange.Order{
@@ -251,22 +299,19 @@ defmodule Naive.Strategy do
           rebuy_notified: false
         },
         positions,
-        settings
+        settings,
+        _data
       ) do
     if trigger_rebuy?(buy_price, current_price, rebuy_interval) &&
          settings.status != "shutdown" &&
          length(positions) < settings.chunks do
-      :rebuy
+      :skip
     else
       :skip
     end
   end
 
-  def generate_decision(%TradeEvent{}, %Position{}, _positions, _settings) do
-    :skip
-  end
-
-  def generate_decision(%OrderEvent{}, %Position{}, _positions, _settings) do
+  def generate_decision(_event_struct, %Position{}, _positions, _settings, _data) do
     :skip
   end
 
@@ -332,21 +377,21 @@ defmodule Naive.Strategy do
   end
 
   defp execute_decision(
-         {:place_buy_order, price, quantity},
+         {:place_buy_order, "LIMIT", price, quantity, python_position},
          %Position{
            id: id,
-           symbol: symbol
+           symbol: symbol,
+           tick_size: tick_size,
+           step_size: step_size
          } = position,
          _settings
        ) do
-    @logger.info(
-      "Position (#{symbol}/#{id}): " <>
-        "Placing a BUY order @ #{price}, quantity: #{quantity}"
-    )
+    [price, quantity] =
+      order_helper(symbol, id, "LIMIT", "BUY", price, quantity, tick_size, step_size)
 
     case @exchange_client.order_limit_buy(symbol, quantity, price) do
       {:ok, %Exchange.Order{} = order} ->
-        {:ok, %{position | buy_order: order}}
+        {:ok, %{position | buy_order: order, position: python_position}}
 
       {:error, error} ->
         @logger.info("Error when placing BUY order. Reason: #{error}")
@@ -355,24 +400,21 @@ defmodule Naive.Strategy do
   end
 
   defp execute_decision(
-         {:place_sell_order, sell_price},
+         {:place_sell_order, "LIMIT", price, quantity, python_position},
          %Position{
            id: id,
            symbol: symbol,
-           buy_order: %Exchange.Order{
-             quantity: quantity
-           }
+           tick_size: tick_size,
+           step_size: step_size
          } = position,
          _settings
        ) do
-    @logger.info(
-      "Position (#{symbol}/#{id}): The BUY order is now filled. " <>
-        "Placing a SELL order @ #{sell_price}, quantity: #{quantity}"
-    )
+    [price, quantity] =
+      order_helper(symbol, id, "LIMIT", "SELL", price, quantity, tick_size, step_size)
 
-    case @exchange_client.order_limit_sell(symbol, quantity, sell_price) do
+    case @exchange_client.order_limit_sell(symbol, quantity, price) do
       {:ok, %Exchange.Order{} = order} ->
-        {:ok, %{position | sell_order: order}}
+        {:ok, %{position | sell_order: order, position: python_position}}
 
       {:error, error} ->
         @logger.info("Error when placing SELL order. Reason: #{error}")
@@ -424,12 +466,48 @@ defmodule Naive.Strategy do
     )
   end
 
+  defp order_helper(
+         symbol,
+         id,
+         "LIMIT",
+         side,
+         price,
+         quantity,
+         tick_size,
+         step_size
+       ) do
+    price = validate_precision(price, tick_size)
+
+    # TODO: Remove hardcoding when quantity calculculation is implemented in the strategy module
+
+    quantity = step_size |> D.cast() |> elem(1) |> D.mult(500)
+    quantity = validate_precision(quantity, step_size)
+
+    @logger.info(
+      "Position (#{symbol}/#{id}): " <>
+        "Placing a LIMIT #{side} order @ #{price}, quantity: #{quantity}"
+    )
+
+    [price, quantity]
+  end
+
+  defp validate_precision(exact_number, precision) do
+    D.to_string(
+      D.mult(
+        D.div_int(exact_number, precision),
+        precision
+      ),
+      :normal
+    )
+  end
+
   def generate_fresh_position(settings, id \\ :os.system_time(:millisecond)) do
     %{
       struct(Position, settings)
       | id: id,
         budget: D.div(settings.budget, settings.chunks),
-        rebuy_notified: false
+        rebuy_notified: false,
+        position: 0
     }
   end
 

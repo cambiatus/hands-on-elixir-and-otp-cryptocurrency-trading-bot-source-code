@@ -29,6 +29,23 @@ Creating hedgehog_db_1 ... done
 $ mix setup
 ```
 
+4. Create python virtualenv:
+
+Note: This setup requires installing the python dependency [`virtualenv`](https://pypi.org/project/virtualenv/)
+
+```
+$ python -m virtualenv apps/strategies/priv/python
+```
+
+5. Activate virtualenv and install dependencies:
+
+```
+$ source apps/strategies/priv/python/bin/activate
+```
+```
+$ pip install -r apps/strategies/priv/python/requirements.txt
+```
+
 ## Further setup (danger zone)
 
 Inside the configuration file(`config/config.exs`) there's a setting(`config :naive, binance_client`) specifying which Binance client should be used. By default, it's the `BinanceMock` module that *won't* connect to the Binance exchange at all neither it will require any access configuration as it stores orders in memory.

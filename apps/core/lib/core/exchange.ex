@@ -36,10 +36,20 @@ defmodule Core.Exchange do
             ) ::
               {:ok, Core.Exchange.Order.t()}
               | {:error, any()}
-  @callback order_limit_buy(symbol :: String.t(), quantity :: number(), price :: number()) ::
+  @callback order_limit_buy(
+              symbol :: String.t(),
+              quantity :: number(),
+              price :: number(),
+              time_in_force :: String.t()
+            ) ::
               {:ok, Core.Exchange.Order.t()}
               | {:error, any()}
-  @callback order_limit_sell(symbol :: String.t(), quantity :: number(), price :: number()) ::
+  @callback order_limit_sell(
+              symbol :: String.t(),
+              quantity :: number(),
+              price :: number(),
+              time_in_force :: String.t()
+            ) ::
               {:ok, Core.Exchange.Order.t()}
               | {:error, any()}
 end
