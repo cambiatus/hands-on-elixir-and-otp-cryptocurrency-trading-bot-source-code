@@ -56,22 +56,23 @@ def define_strategy(df, SMA_S, SMA_L):
 def execute_trades(prepared_data, order, position):
     # TODO: implement dynamically generated quantity to buy/sell
     quantity = 1
+    last_price = str(prepared_data["close_price"].iloc[-1])
     if prepared_data["position"].iloc[-1] == 1: # if position is long -> go/stay long
         if position == 0:
-            order = ["BUY", "MARKET", quantity]
+            order = ["BUY", "LIMIT", last_price, quantity]
         elif position == -1:
-            order = ["BUY", "MARKET", 2*quantity]
+            order = ["BUY", "LIMIT", last_price, 2*quantity]
         position = 1
     elif prepared_data["position"].iloc[-1] == 0: # if position is neutral -> go/stay neutral
         if position == 1:
-            order = ["SELL", "MARKET", quantity]
+            order = ["SELL", "LIMIT", last_price, quantity]
         elif position == -1:
-            order = ["BUY", "MARKET", quantity]
+            order = ["BUY", "LIMIT", last_price, quantity]
         position = 0
     if prepared_data["position"].iloc[-1] == -1: # if position is short -> go/stay short
         if position == 0:
-            order = ["SELL", "MARKET", quantity]
+            order = ["SELL", "LIMIT", last_price, quantity]
         elif position == 1:
-            order = ["SELL", "MARKET", 2*quantity]
+            order = ["SELL", "LIMIT", last_price, 2*quantity]
         position = -1
     return [order, position]
