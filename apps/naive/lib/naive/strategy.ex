@@ -2,7 +2,7 @@ defmodule Naive.Strategy do
   alias Core.Exchange
   alias Core.Struct.{KlineEvent, OrderEvent, TradeEvent}
   alias Decimal, as: D
-  alias Naive.Schema.Settings
+  alias Naive.Schema.{Settings, Traders}
 
   require Logger
 
@@ -510,7 +510,7 @@ defmodule Naive.Strategy do
 
   def update_status(id, status)
       when is_binary(status) do
-    @repo.get_by(Traders: id)
+    @repo.get_by(Traders, id: id)
     |> Ecto.Changeset.change(%{status: status})
     |> @repo.update()
   end
