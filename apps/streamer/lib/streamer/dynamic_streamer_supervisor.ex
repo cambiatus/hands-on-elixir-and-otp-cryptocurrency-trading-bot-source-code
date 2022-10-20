@@ -5,7 +5,7 @@ defmodule Streamer.DynamicStreamerSupervisor do
 
   alias Streamer.Binance
   alias Streamer.Repo
-  alias Streamer.Schema.Settings
+  alias Streamer.Schema.Streamers
 
   import Ecto.Query, only: [from: 2]
 
@@ -21,44 +21,60 @@ defmodule Streamer.DynamicStreamerSupervisor do
 
   def autostart_workers do
     Repo.all(
-      from(s in Settings,
+      from(s in Streamers,
         where: s.status == "on",
-        select: s.symbol
+        select: [s.symbol, s.interval]
       )
     )
-    |> Enum.map(&start_child/1)
+    |> Enum.map(fn [symbol, interval] -> start_child(symbol, to_string(interval)) end)
   end
 
-  def start_worker(symbol) do
+  def start_worker(symbol, interval) do
     Logger.info("Starting streaming #{symbol} trade events")
-    update_status(symbol, "on")
-    start_child(symbol)
+    update_status(symbol, interval, "on")
+    start_child(symbol, interval)
   end
 
-  def stop_worker(symbol) do
+  def stop_worker(symbol, interval) do
     Logger.info("Stopping streaming #{symbol} trade events")
-    update_status(symbol, "off")
-    stop_child(symbol)
+    update_status(symbol, interval, "off")
+    stop_child(symbol, interval)
   end
 
-  defp update_status(symbol, status)
+  defp update_status(symbol, interval, status)
        when is_binary(symbol) and is_binary(status) do
-    Repo.get_by(Settings, symbol: symbol)
-    |> Ecto.Changeset.change(%{status: status})
-    |> Repo.update()
+    case Repo.get_by(Streamers, symbol: symbol, interval: interval) do
+      nil ->
+        %Streamers{
+          symbol: symbol,
+          interval: interval,
+          status: status
+        }
+        |> Repo.insert()
+
+      streamer ->
+        streamer
+        |> Ecto.Changeset.change(%{status: status})
+        |> Repo.update()
+    end
   end
 
-  defp start_child(args) do
+  defp start_child(symbol, interval) do
     DynamicSupervisor.start_child(
       __MODULE__,
-      {Binance, args}
+      {Binance, %{symbol: symbol, interval: interval}}
     )
   end
 
-  defp stop_child(args) do
-    case Registry.lookup(@registry, args) do
-      [{pid, _}] -> DynamicSupervisor.terminate_child(__MODULE__, pid)
-      _ -> Logger.warn("Unable to locate process assigned to #{inspect(args)}")
+  defp stop_child(symbol, interval) do
+    case Registry.lookup(@registry, %{symbol: symbol, interval: interval}) do
+      [{pid, _}] ->
+        DynamicSupervisor.terminate_child(__MODULE__, pid)
+
+      _ ->
+        Logger.warn(
+          "Unable to locate process assigned to #{inspect(%{symbol: symbol, interval: interval})}"
+        )
     end
   end
 end

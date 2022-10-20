@@ -1,59 +1,73 @@
-defmodule Naive.Trader do
+defmodule Trader.Worker do
   use GenServer, restart: :temporary
 
   alias Core.Struct.{KlineEvent, OrderEvent, TradeEvent}
-  alias Naive.Strategy
+  alias Trader.Strategy
+  alias Trader.Schema.Traders
+  alias Trader.Repo
 
   require Logger
 
   @logger Application.compile_env(:core, :logger)
   @pubsub_client Application.compile_env(:core, :pubsub_client)
-  @registry :naive_traders
+  @registry :traders
 
   defmodule State do
-    @enforce_keys [:settings, :positions, :data]
-    defstruct [:settings, positions: [], data: %{}]
+    @enforce_keys [:trader_id, :settings, :positions, :data]
+    defstruct [:trader_id, :settings, positions: [], data: %{}]
   end
 
   @spec start_link(binary) :: :ignore | {:error, any} | {:ok, pid}
-  def start_link(symbol) do
-    symbol = String.upcase(symbol)
-
+  def start_link(id) do
     GenServer.start_link(
       __MODULE__,
-      symbol,
-      name: via_tuple(symbol)
+      id,
+      name: via_tuple(id)
     )
   end
 
-  def init(symbol) do
-    @logger.info("Initializing new trader for #{symbol}")
+  def init(trader_id) do
+    settings = fetch_settings(trader_id)
+
+    @logger.info("Initializing new trader for #{settings.symbol}, id: #{trader_id}")
 
     @pubsub_client.subscribe(
       Core.PubSub,
-      "KLINE_EVENTS:#{symbol}"
+      "KLINE_EVENTS:#{settings.symbol}#{settings.interval}"
     )
 
-    {:ok, nil, {:continue, {:start_position, symbol}}}
+    @pubsub_client.subscribe(
+      Core.PubSub,
+      "ORDER_EVENTS:#{settings.symbol}"
+    )
+
+    {:ok, trader_id, {:continue, {:start_position, settings}}}
   end
 
-  def handle_continue({:start_position, symbol}, _state) do
-    settings = Strategy.fetch_symbol_settings(symbol)
+  def handle_continue(
+        {:start_position, %{symbol: symbol, strategy: strategy, interval: interval, args: args}},
+        trader_id
+      ) do
+    settings =
+      Strategy.fetch_symbol_settings(symbol)
+      |> Map.put(:strategy, strategy)
+      |> Map.put(:strategy_args, args)
+
     positions = [Strategy.generate_fresh_position(settings)]
 
-    # TODO: Remove hardcoded interval and number of datapoints
+    case Strategies.start_strategy(strategy, symbol, interval, args) do
+      {:ok, initial_data} ->
+        {:noreply,
+         %State{
+           trader_id: trader_id,
+           settings: settings,
+           positions: positions,
+           data: initial_data
+         }}
 
-    initial_data =
-      case Core.Exchange.Binance.get_recent_klines_data(symbol, "1m", 50) do
-        {:ok, initial_data} ->
-          Map.put(initial_data, :complete, List.duplicate(true, 50))
-
-        {:error, error} ->
-          Logger.info("Could not get historical data for #{symbol} at 1m")
-          {:stop, error, nil}
-      end
-
-    {:noreply, %State{settings: settings, positions: positions, data: initial_data}}
+      {:error, error} ->
+        {:stop, error, nil}
+    end
   end
 
   def notify(:settings_updated, settings) do
@@ -81,7 +95,7 @@ defmodule Naive.Trader do
   end
 
   def handle_info(%TradeEvent{} = trade_event, %State{} = state) do
-    case Naive.Strategy.execute(trade_event, state.positions, state.settings) do
+    case Trader.Strategy.execute(trade_event, state.positions, state.settings) do
       {:ok, updated_positions} ->
         {:noreply, %{state | positions: updated_positions}}
 
@@ -95,7 +109,13 @@ defmodule Naive.Trader do
   def handle_info(%KlineEvent{} = kline_event, %State{data: data} = state) do
     data = append_kline(kline_event, data)
 
-    case Naive.Strategy.execute(kline_event, state.positions, state.settings, data) do
+    case Trader.Strategy.execute(
+           kline_event,
+           state.positions,
+           state.settings,
+           data,
+           state.trader_id
+         ) do
       {:ok, updated_positions} ->
         {:noreply, %{state | positions: updated_positions, data: data}}
 
@@ -106,8 +126,14 @@ defmodule Naive.Trader do
     end
   end
 
-  def handle_info(%OrderEvent{} = order_event, %State{} = state) do
-    case Naive.Strategy.execute(order_event, state.positions, state.settings) do
+  def handle_info(%OrderEvent{} = order_event, %State{data: data} = state) do
+    case Trader.Strategy.execute(
+           order_event,
+           state.positions,
+           state.settings,
+           data,
+           state.trader_id
+         ) do
       {:ok, updated_positions} ->
         {:noreply, %{state | positions: updated_positions}}
 
@@ -140,7 +166,18 @@ defmodule Naive.Trader do
     end
   end
 
-  defp via_tuple(symbol) do
-    {:via, Registry, {@registry, symbol}}
+  defp fetch_settings(id) do
+    settings = Repo.get(Traders, id)
+
+    %{
+      settings
+      | strategy: String.to_atom(settings.strategy),
+        args: Poison.decode!(settings.args),
+        interval: to_string(settings.interval)
+    }
+  end
+
+  defp via_tuple(args) do
+    {:via, Registry, {@registry, args}}
   end
 end

@@ -1,9 +1,9 @@
-defmodule Naive.MixProject do
+defmodule Trader.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :naive,
+      app: :trader,
       version: "0.1.0",
       build_path: "../../_build",
       config_path: "../../config/config.exs",
@@ -26,7 +26,7 @@ defmodule Naive.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {Naive.Application, []}
+      mod: {Trader.Application, []}
     ]
   end
 
@@ -34,6 +34,7 @@ defmodule Naive.MixProject do
   defp deps do
     [
       {:binance, git: "https://github.com/cambiatus/binance.ex"},
+      {:strategies, in_umbrella: true},
       {:binance_mock, in_umbrella: true},
       {:core, in_umbrella: true},
       {:data_warehouse, in_umbrella: true, only: :test},

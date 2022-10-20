@@ -4,7 +4,7 @@ config :core,
   logger: Test.LoggerMock,
   pubsub_client: Test.PubSubMock
 
-config :naive,
+config :trader,
   exchange_client: Test.BinanceMock,
-  leader: Test.Naive.LeaderMock,
-  repo: Test.Naive.RepoMock
+  leader: Test.Trader.LeaderMock,
+  repo: Test.Trader.RepoMock

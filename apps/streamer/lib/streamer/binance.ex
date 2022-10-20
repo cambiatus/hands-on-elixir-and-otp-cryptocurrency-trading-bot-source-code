@@ -3,41 +3,44 @@ defmodule Streamer.Binance do
 
   require Logger
 
-  @exchange_client Application.get_env(:naive, :exchange_client)
+  @exchange_client Application.get_env(:trader, :exchange_client)
 
   # @stream_endpoint "wss://stream.binance.com:9443/ws/"
   @stream_endpoint "wss://stream.binancefuture.com/ws/"
 
-  def start_link(symbol) do
+  def start_link(%{symbol: symbol, interval: interval}) do
     Logger.info(
       "Binance streamer is connecting to websocket " <>
-        "stream for #{symbol} trade events"
+        "stream for #{symbol} kline events with interval of #{interval}"
     )
-
-    # TODO: Remove hardcoded interval(1m) and enable interval specification for traders
 
     WebSockex.start_link(
-      "#{@stream_endpoint}#{String.downcase(symbol)}@kline_1m",
+      "#{@stream_endpoint}#{String.downcase(symbol)}@kline_#{interval}",
       __MODULE__,
       nil,
-      name: via_tuple(symbol)
+      name: via_tuple(symbol <> interval)
     )
 
-    # TODO: Either move this data streamer to another star link
+    # TODO: Either move this data streamer to another start link
     #       OR conditionally start streaming if no user stream has been started
     # The way it is now it tries to start a stream whenever a streamer is initiated
 
-    case @exchange_client.create_listen_key() do
-      {:ok, %{listen_key: listen_key}} ->
-        WebSockex.start_link(
-          "#{@stream_endpoint}#{listen_key}",
-          __MODULE__,
-          nil,
-          name: {:via, Registry, {:binance_streamers, "orders"}}
-        )
+    with [] <- Registry.lookup(:binance_streamers, "orders"),
+         {:ok, %{listen_key: listen_key}} <- @exchange_client.create_listen_key() do
+      WebSockex.start_link(
+        "#{@stream_endpoint}#{listen_key}",
+        __MODULE__,
+        nil,
+        name: via_tuple("orders")
+      )
+    else
+      [{pid, _}] ->
+        Logger.debug("Order stream already started by process #{pid}")
+        {:ok, pid}
 
       {:error, error} ->
-        Logger.info("Could not connect to user stream. Reason: #{error}")
+        Logger.info("Could not connect to user stream.")
+        {:error, error}
     end
   end
 
@@ -105,7 +108,7 @@ defmodule Streamer.Binance do
 
     Phoenix.PubSub.broadcast(
       Core.PubSub,
-      "KLINE_EVENTS:#{kline_event.symbol}",
+      "KLINE_EVENTS:#{kline_event.symbol}#{kline_event.interval}",
       kline_event
     )
   end
@@ -161,7 +164,7 @@ defmodule Streamer.Binance do
 
     Phoenix.PubSub.broadcast(
       Core.PubSub,
-      "TRADE_EVENTS:#{order_event.symbol}",
+      "ORDER_EVENTS:#{order_event.symbol}",
       order_event
     )
   end
@@ -170,7 +173,7 @@ defmodule Streamer.Binance do
     Logger.debug("Ignored event of type #{event["e"]}")
   end
 
-  defp via_tuple(symbol) do
-    {:via, Registry, {:binance_streamers, symbol}}
+  defp via_tuple(name) do
+    {:via, Registry, {:binance_streamers, name}}
   end
 end

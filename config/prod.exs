@@ -1,6 +1,6 @@
 import Config
 
-config :naive,
+config :trader,
   exchange_client: Core.Exchange.Binance
 
 config :streamer,

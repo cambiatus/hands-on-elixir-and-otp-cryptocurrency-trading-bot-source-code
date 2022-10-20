@@ -1,7 +1,10 @@
 defmodule DataWarehouse.Subscriber.Worker do
   use GenServer
 
-  alias Core.Struct.{KlineEvent, OrderEvent, TradeEvent}
+  alias Core.Struct.{KlineEvent, TradeEvent}
+
+  alias DataWarehouse.Schema.Order
+  alias DataWarehouse.Repo
 
   require Logger
 
@@ -54,22 +57,33 @@ defmodule DataWarehouse.Subscriber.Worker do
     {:noreply, state}
   end
 
-  def handle_info(%OrderEvent{} = order, state) do
-    data = %{
-      id: order.order_id,
-      symbol: order.symbol,
-      price: order.original_price,
-      quantity: order.original_quantity,
-      side: order.side,
-      status: order.order_status,
-      timestamp: order.event_time
-    }
+  def handle_info(%Core.Exchange.Order{} = order, state) do
+    data =
+      %{
+        id: order.id,
+        symbol: order.symbol,
+        price: order.price,
+        quantity: order.quantity,
+        side: order.side,
+        status: order.status,
+        type: order.type,
+        time_in_force: order.time_in_force,
+        average_price: order.average_price,
+        order_id: order.id,
+        realized_quantity: order.realized_quantity,
+        position_side: order.position_side,
+        timestamp: order.timestamp,
+        trader_id: order.trader_id
+      }
+      |> Enum.filter(fn {_, v} -> v end)
+      |> Enum.into(%{})
 
-    struct(DataWarehouse.Schema.Order, data)
-    |> DataWarehouse.Repo.insert(
-      on_conflict: :replace_all,
-      conflict_target: :id
-    )
+    case Repo.get(Order, data.order_id) do
+      nil -> %Order{id: data.order_id}
+      order -> order
+    end
+    |> Order.changeset(data)
+    |> DataWarehouse.Repo.insert_or_update()
 
     {:noreply, state}
   end

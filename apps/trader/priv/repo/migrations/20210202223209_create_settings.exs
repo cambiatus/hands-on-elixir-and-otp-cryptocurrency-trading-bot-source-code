@@ -1,7 +1,7 @@
-defmodule Naive.Repo.Migrations.CreateSettings do
+defmodule Trader.Repo.Migrations.CreateSettings do
   use Ecto.Migration
 
-  alias Naive.Schema.TradingStatusEnum
+  alias Trader.Schema.TradingStatusEnum
 
   def change do
     TradingStatusEnum.create_type()
@@ -15,7 +15,7 @@ defmodule Naive.Repo.Migrations.CreateSettings do
       add(:profit_interval, :decimal, null: false)
       add(:rebuy_interval, :decimal, null: false)
       add(:status, TradingStatusEnum.type(), default: "off", null: false)
-      
+
       timestamps()
     end
 
