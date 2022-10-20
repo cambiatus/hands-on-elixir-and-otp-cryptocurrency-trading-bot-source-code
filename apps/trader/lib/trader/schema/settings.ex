@@ -1,7 +1,7 @@
-defmodule Naive.Schema.Settings do
+defmodule Trader.Schema.Settings do
   use Ecto.Schema
 
-  alias Naive.Schema.TradingStatusEnum
+  alias Trader.Schema.TradingStatusEnum
 
   @primary_key {:id, :binary_id, autogenerate: true}
 

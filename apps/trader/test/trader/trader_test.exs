@@ -1,6 +1,6 @@
-defmodule Naive.TraderTest do
+defmodule Trader.TraderTest do
   use ExUnit.Case
-  doctest Naive.Trader
+  doctest Trader.Trader
 
   import Mox
 
@@ -28,8 +28,8 @@ defmodule Naive.TraderTest do
 
     test_pid = self()
 
-    Test.Naive.LeaderMock
-    |> expect(:notify, fn :trader_state_updated, %Naive.Trader.State{} ->
+    Test.Trader.LeaderMock
+    |> expect(:notify, fn :trader_state_updated, %Trader.Worker.State{} ->
       send(test_pid, :ok)
       :ok
     end)
@@ -40,13 +40,13 @@ defmodule Naive.TraderTest do
     trader_state = dummy_trader_state()
     trade_event = generate_event(1, "0.43183010", "213.10000000")
 
-    {:ok, trader_pid} = Naive.Trader.start_link(trader_state)
+    {:ok, trader_pid} = Trader.Worker.start_link(trader_state)
     send(trader_pid, trade_event)
     assert_receive :ok
   end
 
   defp dummy_trader_state() do
-    %Naive.Strategy.Position{
+    %Trader.Strategy.Position{
       id: 100_000_000,
       symbol: "XRPUSDT",
       budget: "200",

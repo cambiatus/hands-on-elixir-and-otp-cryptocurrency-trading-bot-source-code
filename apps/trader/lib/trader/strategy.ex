@@ -1,14 +1,14 @@
-defmodule Naive.Strategy do
+defmodule Trader.Strategy do
   alias Core.Exchange
   alias Core.Struct.{KlineEvent, OrderEvent, TradeEvent}
   alias Decimal, as: D
-  alias Naive.Schema.{Settings, Traders}
+  alias Trader.Schema.{Settings, Traders}
 
   require Logger
 
-  @exchange_client Application.compile_env(:naive, :exchange_client)
+  @exchange_client Application.compile_env(:trader, :exchange_client)
   @logger Application.compile_env(:core, :logger)
-  @repo Application.compile_env(:naive, :repo)
+  @repo Application.compile_env(:trader, :repo)
   @pubsub_client Application.compile_env(:core, :pubsub_client)
 
   defmodule Position do

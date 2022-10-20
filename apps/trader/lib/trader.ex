@@ -1,10 +1,10 @@
-defmodule Naive do
+defmodule Trader do
   @moduledoc """
-  Documentation for `Naive`.
+  Documentation for `Trader`.
   """
 
-  alias Naive.DynamicTraderSupervisor
-  alias Naive.Trader
+  alias Trader.DynamicTraderSupervisor
+  alias Trader.Worker
 
   def start_trading(symbol, strategy, interval, args) do
     symbol

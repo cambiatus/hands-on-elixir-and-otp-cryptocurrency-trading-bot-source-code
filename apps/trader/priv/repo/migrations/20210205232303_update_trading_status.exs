@@ -1,4 +1,4 @@
-defmodule Naive.Repo.Migrations.UpdateTradingStatus do
+defmodule Trader.Repo.Migrations.UpdateTradingStatus do
   use Ecto.Migration
 
   @disable_ddl_transaction true

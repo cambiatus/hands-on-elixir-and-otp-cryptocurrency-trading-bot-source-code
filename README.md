@@ -48,7 +48,7 @@ $ pip install -r apps/strategies/priv/python/requirements.txt
 
 ## Further setup (danger zone)
 
-Inside the configuration file(`config/config.exs`) there's a setting(`config :naive, binance_client`) specifying which Binance client should be used. By default, it's the `BinanceMock` module that *won't* connect to the Binance exchange at all neither it will require any access configuration as it stores orders in memory.
+Inside the configuration file(`config/config.exs`) there's a setting(`config :trader, binance_client`) specifying which Binance client should be used. By default, it's the `BinanceMock` module that *won't* connect to the Binance exchange at all neither it will require any access configuration as it stores orders in memory.
 
 To connect to the Binance exchange and make real trades the configuration needs to be changed to the `Binance` client:
 
@@ -80,8 +80,8 @@ DataWarehouse.start_storing("kline_events", "xrpusdt", "1m")
 # to store orders in db
 DataWarehouse.start_storing("orders", "xrpusdt")
 
-# turn on naive strategy
-Naive.start_trading("XRPUSDT", :sma, "1m", %{sma_s: 10, sma_l: 50})
+# turn on trader
+Trader.start_trading("XRPUSDT", :sma, "1m", %{sma_s: 10, sma_l: 50})
 ```
 
 ## Postgres cheat sheet
@@ -117,7 +117,7 @@ PGPASSWORD=postgres psql -Upostgres -h localhost -ddata_warehouse  -c "\COPY tra
 ```
 DataWarehouse.start_storing("orders", "xrpusdt")
 
-Naive.start_trading("XRPUSDT")
+Trader.start_trading("XRPUSDT")
 
 DataWarehouse.publish_data(%{
   type: :trade_events,

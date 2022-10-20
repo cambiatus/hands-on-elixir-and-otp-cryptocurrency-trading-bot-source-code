@@ -1,16 +1,16 @@
-defmodule Naive.Trader do
+defmodule Trader.Worker do
   use GenServer, restart: :temporary
 
   alias Core.Struct.{KlineEvent, OrderEvent, TradeEvent}
-  alias Naive.Strategy
-  alias Naive.Schema.Traders
-  alias Naive.Repo
+  alias Trader.Strategy
+  alias Trader.Schema.Traders
+  alias Trader.Repo
 
   require Logger
 
   @logger Application.compile_env(:core, :logger)
   @pubsub_client Application.compile_env(:core, :pubsub_client)
-  @registry :naive_traders
+  @registry :traders
 
   defmodule State do
     @enforce_keys [:trader_id, :settings, :positions, :data]
@@ -95,7 +95,7 @@ defmodule Naive.Trader do
   end
 
   def handle_info(%TradeEvent{} = trade_event, %State{} = state) do
-    case Naive.Strategy.execute(trade_event, state.positions, state.settings) do
+    case Trader.Strategy.execute(trade_event, state.positions, state.settings) do
       {:ok, updated_positions} ->
         {:noreply, %{state | positions: updated_positions}}
 
@@ -109,7 +109,7 @@ defmodule Naive.Trader do
   def handle_info(%KlineEvent{} = kline_event, %State{data: data} = state) do
     data = append_kline(kline_event, data)
 
-    case Naive.Strategy.execute(
+    case Trader.Strategy.execute(
            kline_event,
            state.positions,
            state.settings,
@@ -127,7 +127,7 @@ defmodule Naive.Trader do
   end
 
   def handle_info(%OrderEvent{} = order_event, %State{data: data} = state) do
-    case Naive.Strategy.execute(
+    case Trader.Strategy.execute(
            order_event,
            state.positions,
            state.settings,

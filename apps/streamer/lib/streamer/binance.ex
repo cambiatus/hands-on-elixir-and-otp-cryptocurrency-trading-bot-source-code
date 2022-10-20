@@ -3,7 +3,7 @@ defmodule Streamer.Binance do
 
   require Logger
 
-  @exchange_client Application.get_env(:naive, :exchange_client)
+  @exchange_client Application.get_env(:trader, :exchange_client)
 
   # @stream_endpoint "wss://stream.binance.com:9443/ws/"
   @stream_endpoint "wss://stream.binancefuture.com/ws/"

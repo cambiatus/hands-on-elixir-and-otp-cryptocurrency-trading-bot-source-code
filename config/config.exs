@@ -41,12 +41,12 @@ config :streamer, Streamer.Repo,
   password: "postgres",
   hostname: "localhost"
 
-config :naive,
+config :trader,
   # exchange_client: BinanceMock,
   exchange_client: Core.Exchange.Binance,
-  ecto_repos: [Naive.Repo],
-  leader: Naive.Leader,
-  repo: Naive.Repo,
+  ecto_repos: [Trader.Repo],
+  leader: Trader.Leader,
+  repo: Trader.Repo,
   trading: %{
     defaults: %{
       chunks: 5,
@@ -57,8 +57,8 @@ config :naive,
     }
   }
 
-config :naive, Naive.Repo,
-  database: "naive",
+config :trader, Trader.Repo,
+  database: "trader",
   username: "postgres",
   password: "postgres",
   hostname: "localhost"

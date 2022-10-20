@@ -1,7 +1,7 @@
-defmodule Naive.Repo.Migrations.CreateTraders do
+defmodule Trader.Repo.Migrations.CreateTraders do
   use Ecto.Migration
 
-  alias Naive.Schema.{TradingIntervalEnum, TradingStatusEnum}
+  alias Trader.Schema.{TradingIntervalEnum, TradingStatusEnum}
 
   def change do
     TradingIntervalEnum.create_type()

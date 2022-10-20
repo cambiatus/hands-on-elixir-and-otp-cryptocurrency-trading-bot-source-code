@@ -21,7 +21,7 @@ defmodule Hedgehog.MixProject do
         "ecto.drop",
         "ecto.create",
         "ecto.migrate",
-        "run apps/naive/priv/seed_settings.exs",
+        "run apps/trader/priv/seed_settings.exs",
         "run apps/streamer/priv/seed_settings.exs"
       ],
       "test.integration": [

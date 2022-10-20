@@ -1,10 +1,10 @@
 require Logger
 
 alias Decimal
-alias Naive.Repo
-alias Naive.Schema.Settings
+alias Trader.Repo
+alias Trader.Schema.Settings
 
-exchange_client = Application.get_env(:naive, :exchange_client)
+exchange_client = Application.get_env(:trader, :exchange_client)
 
 Logger.info("Fetching exchange info from Binance to create trading settings")
 
@@ -16,7 +16,7 @@ Logger.info("Fetching exchange info from Binance to create trading settings")
   buy_down_interval: buy_down_interval,
   profit_interval: profit_interval,
   rebuy_interval: rebuy_interval
-} = Application.get_env(:naive, :trading).defaults
+} = Application.get_env(:trader, :trading).defaults
 
 timestamp = NaiveDateTime.utc_now()
   |> NaiveDateTime.truncate(:second)

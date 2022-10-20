@@ -1,7 +1,7 @@
-defmodule Naive.Schema.Traders do
+defmodule Trader.Schema.Traders do
   use Ecto.Schema
 
-  alias Naive.Schema.{TradingIntervalEnum, TradingStatusEnum}
+  alias Trader.Schema.{TradingIntervalEnum, TradingStatusEnum}
 
   @primary_key {:id, :binary_id, autogenerate: true}
 

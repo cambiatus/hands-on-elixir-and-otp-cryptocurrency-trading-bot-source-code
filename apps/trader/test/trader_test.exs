@@ -1,15 +1,15 @@
-defmodule NaiveTest do
+defmodule TraderTest do
   use ExUnit.Case
-  doctest Naive
+  doctest Trader
 
   alias DataWarehouse.Schema.Order
-  alias Naive.Schema.Settings, as: TradingSettings
+  alias Trader.Schema.Settings, as: TradingSettings
   alias Core.Struct.TradeEvent
 
   import Ecto.Query, only: [from: 2]
 
   @tag integration: true
-  test "Naive trader full trade(buy + sell) test" do
+  test "Trader trader full trade(buy + sell) test" do
     symbol = "XRPUSDT"
 
     # Step 1 - Update trading settings
@@ -23,13 +23,13 @@ defmodule NaiveTest do
 
     {:ok, _} =
       TradingSettings
-      |> Naive.Repo.get_by!(symbol: symbol)
+      |> Trader.Repo.get_by!(symbol: symbol)
       |> Ecto.Changeset.change(settings)
-      |> Naive.Repo.update()
+      |> Trader.Repo.update()
 
     # Step 2 - Start trading on symbol
 
-    Naive.start_trading(symbol)
+    Trader.start_trading(symbol)
 
     # Step 3 - Start storing orders
 

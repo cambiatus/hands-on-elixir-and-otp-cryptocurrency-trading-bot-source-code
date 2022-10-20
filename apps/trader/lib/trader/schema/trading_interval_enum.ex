@@ -1,6 +1,6 @@
 import EctoEnum
 
-defenum(Naive.Schema.TradingIntervalEnum, :interval, [
+defenum(Trader.Schema.TradingIntervalEnum, :interval, [
   "1m",
   "3m",
   "5m",

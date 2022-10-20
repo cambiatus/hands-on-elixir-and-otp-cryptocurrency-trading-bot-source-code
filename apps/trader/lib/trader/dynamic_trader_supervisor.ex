@@ -1,18 +1,18 @@
-defmodule Naive.DynamicTraderSupervisor do
+defmodule Trader.DynamicTraderSupervisor do
   use DynamicSupervisor
 
   require Logger
 
   import Ecto.Query
 
-  alias Naive.Schema.Traders
+  alias Trader.Schema.Traders
 
-  alias Naive.Repo
-  alias Naive.Schema.Traders
-  alias Naive.Strategy
-  alias Naive.Trader
+  alias Trader.Repo
+  alias Trader.Schema.Traders
+  alias Trader.Strategy
+  alias Trader.Worker
 
-  @registry :naive_traders
+  @registry :traders
 
   def start_link(_arg) do
     DynamicSupervisor.start_link(__MODULE__, [], name: __MODULE__)
@@ -91,7 +91,7 @@ defmodule Naive.DynamicTraderSupervisor do
   defp start_child(id) do
     DynamicSupervisor.start_child(
       __MODULE__,
-      {Trader, id}
+      {Worker, id}
     )
   end
 

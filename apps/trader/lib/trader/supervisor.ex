@@ -1,9 +1,9 @@
-defmodule Naive.Supervisor do
+defmodule Trader.Supervisor do
   use Supervisor
 
-  alias Naive.DynamicTraderSupervisor
+  alias Trader.DynamicTraderSupervisor
 
-  @registry :naive_traders
+  @registry :traders
 
   def start_link(init_arg) do
     Supervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
